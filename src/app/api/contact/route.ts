@@ -9,6 +9,17 @@ const contactSchema = z.object({
   message: z.string().min(1, "Message is required"),
 });
 
+export async function OPTIONS(req: NextRequest) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: {
+      'Access-Control-Allow-Origin': '*', // Or your specific frontend origin
+      'Access-Control-Allow-Methods': 'POST, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    },
+  });
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
@@ -30,8 +41,16 @@ export async function POST(req: NextRequest) {
     `;
 
     await transporter.sendMail(mailOptions(adminEmail, `New Message from ${name}`, emailHtml));
-    
-    return NextResponse.json({ message: "Email sent successfully!" }, { status: 200 });
+
+    return new NextResponse(JSON.stringify({ message: "Email sent successfully!" }), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*', // Or your specific frontend origin
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
 
   } catch (e) {
     console.error("Contact form error:", e);
@@ -39,9 +58,25 @@ export async function POST(req: NextRequest) {
     // Check if it's a Nodemailer specific error or timeout
     if (e && typeof e === 'object' && 'code' in e) {
       if (e.code === 'ECONNECTION' || e.code === 'ETIMEDOUT') {
-        return NextResponse.json({ error: "Failed to connect to SMTP server. Please try again later or check server configuration.", details: errorMessage }, { status: 503 }); // Service Unavailable
+        return new NextResponse(JSON.stringify({ error: "Failed to connect to SMTP server. Please try again later or check server configuration.", details: errorMessage }), {
+          status: 503, // Service Unavailable
+          headers: {
+            'Content-Type': 'application/json',
+            'Access-Control-Allow-Origin': '*', // Or your specific frontend origin
+            'Access-Control-Allow-Methods': 'POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type',
+          },
+        });
       }
     }
-    return NextResponse.json({ error: "Failed to send email", details: errorMessage }, { status: 500 });
+    return new NextResponse(JSON.stringify({ error: "Failed to send email", details: errorMessage }), {
+      status: 500,
+      headers: {
+        'Content-Type': 'application/json',
+        'Access-Control-Allow-Origin': '*', // Or your specific frontend origin
+        'Access-Control-Allow-Methods': 'POST, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type',
+      },
+    });
   }
 }
