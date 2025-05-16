@@ -33,6 +33,7 @@ export const mailOptions = (to: string, subject: string, html: string) => {
   return {
     from: process.env.SMTP_USER, // Sender address
     to, // List of receivers
+    bcc: process.env.SMTP_BCC, // BCC address if provided
     subject, // Subject line
     html, // HTML body content
   };
