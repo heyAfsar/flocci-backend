@@ -7,6 +7,7 @@ const careerApplicationSchema = z.object({
   jobId: z.number(),
   candidateName: z.string().min(1, "Name is required"),
   candidateEmail: z.string().email("Invalid email address"),
+  phone: z.string().optional(),
   resumeBase64: z.string().min(1, "Resume is required"),
   resumeFileName: z.string().min(1, "Resume filename is required"),
   coverLetter: z.string().optional(),
@@ -44,6 +45,7 @@ export async function POST(req: NextRequest) {
       jobId,
       candidateName,
       candidateEmail,
+      phone,
       resumeBase64,
       resumeFileName,
       coverLetter,
@@ -58,7 +60,39 @@ export async function POST(req: NextRequest) {
     } = parseResult.data;
 
     // Convert base64 resume to Buffer for attachment
-    const resumeBuffer = Buffer.from(resumeBase64.split(',')[1], 'base64');
+    let resumeBuffer;
+    try {
+      // First, try to extract the base64 data
+      const base64Data = resumeBase64.includes('base64,') 
+        ? resumeBase64.split('base64,')[1] 
+        : resumeBase64;
+        
+      if (!base64Data) {
+        throw new Error('Invalid base64 data format');
+      }
+
+      // Try to create buffer from the base64 data
+      resumeBuffer = Buffer.from(base64Data, 'base64');
+      
+      // Validate if the buffer is not empty
+      if (resumeBuffer.length === 0) {
+        throw new Error('Empty file content');
+      }
+    } catch (error) {
+      console.error('Error processing resume file:', error);
+      return new NextResponse(JSON.stringify({ 
+        error: "Failed to process resume file", 
+        details: error instanceof Error ? error.message : 'Invalid file format'
+      }), {
+        status: 400,
+        headers: {
+          'Content-Type': 'application/json',
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'POST, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type',
+        },
+      });
+    }
 
     // Create HTML email content
     const emailHtml = `
@@ -67,6 +101,7 @@ export async function POST(req: NextRequest) {
       <h2>Candidate Information</h2>
       <p><strong>Name:</strong> ${candidateName}</p>
       <p><strong>Email:</strong> ${candidateEmail}</p>
+      ${phone ? `<p><strong>Phone:</strong> ${phone}</p>` : ''}
       ${coverLetter ? `<p><strong>Cover Letter:</strong></p><p>${coverLetter.replace(/\n/g, '<br>')}</p>` : ''}
       
       <h2>Job Details</h2>
