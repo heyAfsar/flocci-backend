@@ -1,0 +1,495 @@
+{
+  "info": {
+    "name": "Flocci Backend API Collection",
+    "description": "Complete API collection for Flocci Backend with authentication, user management, and business endpoints",
+    "version": "1.0.0",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "production_url",
+      "value": "https://flocci.in",
+      "type": "string"
+    },
+    {
+      "key": "session_token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Status",
+      "item": [
+        {
+          "name": "Health Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/health",
+              "host": ["{{base_url}}"],
+              "path": ["api", "health"]
+            },
+            "description": "Basic health check endpoint to verify API is running"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "User Signup",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\",\n  \"full_name\": \"John Doe\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/signup",
+              "host": ["{{base_url}}"],
+              "path": ["api", "signup"]
+            },
+            "description": "Create a new user account with email and password"
+          },
+          "response": []
+        },
+        {
+          "name": "User Login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "login"]
+            },
+            "description": "Login with email and password, returns session token"
+          },
+          "response": []
+        },
+        {
+          "name": "Check Session",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "session_token={{session_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/session",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "session"]
+            },
+            "description": "Validate current session and get user info"
+          },
+          "response": []
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "session_token={{session_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/auth/session",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "session"]
+            },
+            "description": "Logout and invalidate session"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "OAuth",
+      "item": [
+        {
+          "name": "Google OAuth Initiate",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/google",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "google"]
+            },
+            "description": "Initiate Google OAuth login flow"
+          },
+          "response": []
+        },
+        {
+          "name": "OAuth Callback",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/callback?code=AUTH_CODE_HERE",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "callback"],
+              "query": [
+                {
+                  "key": "code",
+                  "value": "AUTH_CODE_HERE",
+                  "description": "Authorization code from OAuth provider"
+                }
+              ]
+            },
+            "description": "Handle OAuth callback with authorization code"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Contact & Communication",
+      "item": [
+        {
+          "name": "Contact Form",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"phone\": \"+1234567890\",\n  \"subject\": \"General Inquiry\",\n  \"message\": \"I would like to know more about your services.\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/contact",
+              "host": ["{{base_url}}"],
+              "path": ["api", "contact"]
+            },
+            "description": "Submit general contact form"
+          },
+          "response": []
+        },
+        {
+          "name": "Company Contact",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_name\": \"Tech Corp\",\n  \"contact_person\": \"Jane Smith\",\n  \"email\": \"jane@techcorp.com\",\n  \"phone\": \"+1234567890\",\n  \"message\": \"We are interested in your job posting services.\",\n  \"industry\": \"Technology\",\n  \"company_size\": \"50-100\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/company/contact",
+              "host": ["{{base_url}}"],
+              "path": ["api", "company", "contact"]
+            },
+            "description": "Company-specific contact form for business inquiries"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Careers & Jobs",
+      "item": [
+        {
+          "name": "Get Job Listings",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/careers",
+              "host": ["{{base_url}}"],
+              "path": ["api", "careers"]
+            },
+            "description": "Get all active job listings"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Job Listings with Filters",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/careers?location=Remote&experience_level=mid&job_type=full-time",
+              "host": ["{{base_url}}"],
+              "path": ["api", "careers"],
+              "query": [
+                {
+                  "key": "location",
+                  "value": "Remote",
+                  "description": "Filter by location"
+                },
+                {
+                  "key": "experience_level",
+                  "value": "mid",
+                  "description": "Filter by experience level (entry, mid, senior, lead)"
+                },
+                {
+                  "key": "job_type",
+                  "value": "full-time",
+                  "description": "Filter by job type"
+                }
+              ]
+            },
+            "description": "Get filtered job listings"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Payments",
+      "item": [
+        {
+          "name": "Initiate Payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Cookie",
+                "value": "session_token={{session_token}}"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"company_name\": \"Tech Corp\",\n  \"package_type\": \"Premium Job Posting\",\n  \"amount\": 2999.00,\n  \"currency\": \"INR\",\n  \"billing_address\": {\n    \"street\": \"123 Tech Street\",\n    \"city\": \"Mumbai\",\n    \"state\": \"Maharashtra\",\n    \"zip\": \"400001\",\n    \"country\": \"India\"\n  }\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/initiate",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "initiate"]
+            },
+            "description": "Initiate payment process for services"
+          },
+          "response": []
+        },
+        {
+          "name": "Payment Success Callback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnid\": \"TXN123456789\",\n  \"amount\": \"2999.00\",\n  \"productinfo\": \"Premium Job Posting\",\n  \"firstname\": \"John\",\n  \"email\": \"john@techcorp.com\",\n  \"status\": \"success\",\n  \"hash\": \"payment_hash_here\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/success",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "success"]
+            },
+            "description": "Handle successful payment callback from PayU"
+          },
+          "response": []
+        },
+        {
+          "name": "Payment Failure Callback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"txnid\": \"TXN123456789\",\n  \"amount\": \"2999.00\",\n  \"productinfo\": \"Premium Job Posting\",\n  \"firstname\": \"John\",\n  \"email\": \"john@techcorp.com\",\n  \"status\": \"failure\",\n  \"error\": \"Payment declined\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/failure",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "failure"]
+            },
+            "description": "Handle failed payment callback from PayU"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Admin Endpoints",
+      "item": [
+        {
+          "name": "Admin Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "session_token={{session_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/dashboard",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "dashboard"]
+            },
+            "description": "Get admin dashboard data (requires admin privileges)"
+          },
+          "response": []
+        },
+        {
+          "name": "System Monitoring",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "session_token={{session_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/monitoring",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "monitoring"]
+            },
+            "description": "Get system monitoring data (requires admin privileges)"
+          },
+          "response": []
+        },
+        {
+          "name": "Rate Limits Status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "session_token={{session_token}}"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/admin/rate-limits",
+              "host": ["{{base_url}}"],
+              "path": ["api", "admin", "rate-limits"]
+            },
+            "description": "Get rate limiting status (requires admin privileges)"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Test Scenarios",
+      "item": [
+        {
+          "name": "Complete Auth Flow Test",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"test.{{$timestamp}}@example.com\",\n  \"password\": \"password123\",\n  \"full_name\": \"Test User {{$timestamp}}\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/signup",
+              "host": ["{{base_url}}"],
+              "path": ["api", "signup"]
+            },
+            "description": "Test signup with dynamic timestamp email"
+          },
+          "response": []
+        },
+        {
+          "name": "Invalid Login Test",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"invalid@example.com\",\n  \"password\": \"wrongpassword\"\n}"
+            },
+            "url": {
+              "raw": "{{base_url}}/api/login",
+              "host": ["{{base_url}}"],
+              "path": ["api", "login"]
+            },
+            "description": "Test login with invalid credentials (should fail)"
+          },
+          "response": []
+        },
+        {
+          "name": "Unauthorized Session Check",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{base_url}}/api/auth/session",
+              "host": ["{{base_url}}"],
+              "path": ["api", "auth", "session"]
+            },
+            "description": "Test session check without token (should fail)"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "// Auto-extract session token from login responses",
+          "if (pm.response && pm.response.json() && pm.response.json().session_token) {",
+          "    pm.collectionVariables.set('session_token', pm.response.json().session_token);",
+          "}"
+        ]
+      }
+    }
+  ]
+}

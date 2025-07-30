@@ -8,62 +8,46 @@
  * - ResolveCompanyEmailOutput - The return type for the resolveCompanyEmail function.
  */
 
-import {ai} from '@/ai/genkit';
-import {z} from 'genkit';
+import { z } from 'zod';
+import { model } from '@/lib/genai';
 
 const ResolveCompanyEmailInputSchema = z.object({
-  companyName: z.string().describe('The name of the company to resolve the email address for.'),
+  companyName: z.string().min(1, 'Company name is required'),
 });
 export type ResolveCompanyEmailInput = z.infer<typeof ResolveCompanyEmailInputSchema>;
 
 const ResolveCompanyEmailOutputSchema = z.object({
-  emailAddress: z.string().describe('The resolved email address for the company.'),
+  emailAddress: z.string().email('Must be a valid email address'),
 });
 export type ResolveCompanyEmailOutput = z.infer<typeof ResolveCompanyEmailOutputSchema>;
 
 export async function resolveCompanyEmail(input: ResolveCompanyEmailInput): Promise<ResolveCompanyEmailOutput> {
-  return resolveCompanyEmailFlow(input);
-}
+  try {
+    // Input validation
+    const validatedInput = ResolveCompanyEmailInputSchema.parse(input);
 
-const prompt = ai.definePrompt({
-  name: 'resolveCompanyEmailPrompt',
-  input: {schema: ResolveCompanyEmailInputSchema},
-  output: {schema: ResolveCompanyEmailOutputSchema},
-  prompt: `You are an expert at finding email addresses for companies.
+    // Using the pre-configured model from lib/genai
 
-  Given the name of a company, you will find the email address for that company.
+    const prompt = `You are an expert at finding company email addresses.
+    For the company "${validatedInput.companyName}", provide their most likely general contact email address.
+    Only return the email address, nothing else. If you can't determine it with high confidence, return support@${validatedInput.companyName.toLowerCase().replace(/\s+/g, '')}.com
+    `;
 
-  Company Name: {{{companyName}}}
-  `, config: {
-    safetySettings: [
-      {
-        category: 'HARM_CATEGORY_HATE_SPEECH',
-        threshold: 'BLOCK_ONLY_HIGH',
-      },
-      {
-        category: 'HARM_CATEGORY_DANGEROUS_CONTENT',
-        threshold: 'BLOCK_NONE',
-      },
-      {
-        category: 'HARM_CATEGORY_HARASSMENT',
-        threshold: 'BLOCK_MEDIUM_AND_ABOVE',
-      },
-      {
-        category: 'HARM_CATEGORY_SEXUALLY_EXPLICIT',
-        threshold: 'BLOCK_LOW_AND_ABOVE',
-      },
-    ],
-  },
-});
+    // Generate content
+    const result = await model.generateContent(prompt);
+    const response = result.response;
+    const email = response.text().trim();
 
-const resolveCompanyEmailFlow = ai.defineFlow(
-  {
-    name: 'resolveCompanyEmailFlow',
-    inputSchema: ResolveCompanyEmailInputSchema,
-    outputSchema: ResolveCompanyEmailOutputSchema,
-  },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
+    // Validate output
+    const output = ResolveCompanyEmailOutputSchema.parse({ emailAddress: email });
+    return output;
+
+  } catch (error) {
+    console.error('Company email resolution error:', error);
+    // Fallback to a default format if AI generation fails
+    const sanitizedCompanyName = input.companyName.toLowerCase().replace(/[^a-z0-9]/g, '');
+    return {
+      emailAddress: `contact@${sanitizedCompanyName}.com`
+    };
   }
-);
+}

@@ -43,10 +43,10 @@ export async function POST(req: NextRequest) {
       <p><strong>Message:</strong></p>
       <p>${message.replace(/\n/g, '<br>')}</p>
       <hr>
-      <p><small>This email was sent via NexusConnect's company contact feature.</small></p>
+      <p><small>This email was sent via FLOCCI API HUB's company contact feature.</small></p>
     `;
 
-    await transporter.sendMail(mailOptions(targetCompanyEmail, `Inquiry from ${senderName} via NexusConnect`, emailHtml));
+    await transporter.sendMail(mailOptions(targetCompanyEmail, `Inquiry from ${senderName} via FLOCCI API HUB`, emailHtml));
     
     return NextResponse.json({ message: `Email successfully sent to ${companyName} (at ${targetCompanyEmail})!` }, { status: 200 });
 

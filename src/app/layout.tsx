@@ -16,8 +16,8 @@ const roboto_mono = Roboto_Mono({
 });
 
 export const metadata: Metadata = {
-  title: 'NexusConnect',
-  description: 'Connecting businesses and people intelligently.',
+  title: 'FLOCCI API HUB',
+  description: 'Intelligent API solutions by Flocci Technologies (flocci.in)',
 };
 
 export default function RootLayout({

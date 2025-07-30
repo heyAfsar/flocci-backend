@@ -1,4 +1,7 @@
-# **App Name**: NexusConnect
+# **App Name**: FLOCCI API HUB
+
+## Product Description
+An intelligent API hub by Flocci Technologies (flocci.in) that provides seamless integration capabilities for businesses and developers.
 
 ## Core Features:
 
