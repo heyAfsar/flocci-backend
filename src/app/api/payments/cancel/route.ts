@@ -15,7 +15,7 @@ function calculateResponseHash(params: any) {
 
 // Handle GET requests (redirected from frontend)
 export async function GET(req: NextRequest) {
-  return new Response('<h2>Payment failed. Please try again or contact support.</h2>', {
+  return new Response('<h2>Payment was cancelled. You can try again or contact support.</h2>', {
     headers: { 'Content-Type': 'text/html' },
     status: 200,
   });
@@ -32,35 +32,35 @@ export async function POST(req: NextRequest) {
 
     // Check if this is a valid PayU callback with required fields
     if (!params.txnid || !params.hash || !params.status) {
-      console.log('Invalid PayU failure callback - missing required fields');
+      console.log('Invalid PayU cancel callback - missing required fields');
       return new Response('OK', { status: 200 }); // Return OK to prevent retries
     }
 
     const responseHash = calculateResponseHash(params);
     if (responseHash !== params.hash) {
-      console.log('PayU hash verification failed for failure callback');
+      console.log('PayU hash verification failed for cancel callback');
       return new Response('Invalid hash', { status: 400 });
     }
 
     // Find order and verify amount
     const { data: order } = await supabase.from('orders').select('*').eq('txnid', params.txnid).single();
     if (!order || order.amount != params.amount) {
-      console.log('Order mismatch for failed payment txnid:', params.txnid);
+      console.log('Order mismatch for cancelled payment txnid:', params.txnid);
       return new Response('Order mismatch', { status: 400 });
     }
 
-    // Update order status only if it's not already failed
-    if (order.status !== 'FAILED') {
+    // Update order status only if it's not already cancelled
+    if (order.status !== 'CANCELLED') {
       await supabase.from('orders').update({ 
-        status: 'FAILED',
+        status: 'CANCELLED',
         updated_at: new Date().toISOString()
       }).eq('txnid', params.txnid);
-      console.log('Order marked as FAILED:', params.txnid);
+      console.log('Order marked as CANCELLED:', params.txnid);
     }
 
     return new Response('OK', { status: 200 });
   } catch (error) {
-    console.error('Payment failure callback error:', error);
+    console.error('Payment cancel callback error:', error);
     return new Response('Internal error', { status: 500 });
   }
 }

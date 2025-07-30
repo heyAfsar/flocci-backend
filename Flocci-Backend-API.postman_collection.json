@@ -298,7 +298,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "payments", "initiate"]
             },
-            "description": "Initiate payment process using PayU test environment. Uses test credentials: Key=gtKFFx, Salt=eCwWELxi"
+            "description": "Initiate payment process. PayU will redirect to frontend URLs for success/failure handling. Backend URLs are for server-side webhooks only."
           },
           "response": []
         },
@@ -321,7 +321,59 @@
               "host": ["{{base_url}}"],
               "path": ["api", "payments", "success"]
             },
-            "description": "Handle successful payment callback from PayU"
+            "description": "Handle successful payment callback from PayU (server-side webhook). Frontend handles user experience."
+          },
+          "response": []
+        },
+        {
+          "name": "Payment Webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/x-www-form-urlencoded"
+              }
+            ],
+            "body": {
+              "mode": "urlencoded",
+              "urlencoded": [
+                {
+                  "key": "txnid",
+                  "value": "TXN123456789"
+                },
+                {
+                  "key": "amount",
+                  "value": "100.00"
+                },
+                {
+                  "key": "productinfo",
+                  "value": "Test Product"
+                },
+                {
+                  "key": "firstname",
+                  "value": "Test User"
+                },
+                {
+                  "key": "email",
+                  "value": "test@example.com"
+                },
+                {
+                  "key": "status",
+                  "value": "success"
+                },
+                {
+                  "key": "hash",
+                  "value": "payment_hash_here"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/api/payments/webhook",
+              "host": ["{{base_url}}"],
+              "path": ["api", "payments", "webhook"]
+            },
+            "description": "Server-side payment verification webhook for audit and backend processing"
           },
           "response": []
         },
@@ -344,7 +396,7 @@
               "host": ["{{base_url}}"],
               "path": ["api", "payments", "failure"]
             },
-            "description": "Handle failed payment callback from PayU"
+            "description": "Handle failed payment callback from PayU (server-side webhook). Frontend handles user experience."
           },
           "response": []
         }
