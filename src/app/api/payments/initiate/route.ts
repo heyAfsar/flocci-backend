@@ -26,8 +26,10 @@ export async function POST(req: NextRequest) {
   // PayU credentials from env
   const key = process.env.PAYU_KEY!;
   const salt = process.env.PAYU_SALT!;
-  const surl = process.env.PAYU_SURL!;
-  const furl = process.env.PAYU_FURL!;
+  // Use frontend URLs for PayU callbacks
+  const surl = 'https://www.flocci.in/api/payments/success';
+  const furl = 'https://www.flocci.in/api/payments/failure';
+  const curl = 'https://www.flocci.in/api/payments/cancel';
   const env = process.env.PAYU_ENV || 'test';
   
   // Determine PayU URL based on environment
@@ -53,6 +55,7 @@ export async function POST(req: NextRequest) {
           <input type="hidden" name="firstname" value="${firstname}" />
           <input type="hidden" name="surl" value="${surl}" />
           <input type="hidden" name="furl" value="${furl}" />
+          <input type="hidden" name="curl" value="${curl}" />
           <input type="hidden" name="phone" value="${phone}" />
           <input type="hidden" name="hash" value="${hash}" />
         </form>
