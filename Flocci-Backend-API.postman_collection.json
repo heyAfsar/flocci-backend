@@ -291,14 +291,14 @@
             ],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"company_name\": \"Tech Corp\",\n  \"package_type\": \"Premium Job Posting\",\n  \"amount\": 2999.00,\n  \"currency\": \"INR\",\n  \"billing_address\": {\n    \"street\": \"123 Tech Street\",\n    \"city\": \"Mumbai\",\n    \"state\": \"Maharashtra\",\n    \"zip\": \"400001\",\n    \"country\": \"India\"\n  }\n}"
+              "raw": "{\n  \"amount\": \"100.00\",\n  \"productinfo\": \"Test Product - Premium Service\",\n  \"firstname\": \"Test User\",\n  \"email\": \"test@example.com\",\n  \"phone\": \"1234567890\"\n}"
             },
             "url": {
               "raw": "{{base_url}}/api/payments/initiate",
               "host": ["{{base_url}}"],
               "path": ["api", "payments", "initiate"]
             },
-            "description": "Initiate payment process for services"
+            "description": "Initiate payment process using PayU test environment. Uses test credentials: Key=gtKFFx, Salt=eCwWELxi"
           },
           "response": []
         },

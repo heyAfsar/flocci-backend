@@ -28,6 +28,11 @@ export async function POST(req: NextRequest) {
   const salt = process.env.PAYU_SALT!;
   const surl = process.env.PAYU_SURL!;
   const furl = process.env.PAYU_FURL!;
+  const env = process.env.PAYU_ENV || 'test';
+  
+  // Determine PayU URL based on environment
+  const payuUrl = env === 'production' ? 'https://secure.payu.in/_payment' : 'https://test.payu.in/_payment';
+  console.log('DEBUG PAYU_ENV:', env, 'PayU URL:', payuUrl);
 
   // Hash string
   const hashString = `${key}|${txnid}|${amount}|${productinfo}|${firstname}|${email}|||||||||||${salt}`;
@@ -39,7 +44,7 @@ export async function POST(req: NextRequest) {
       <head><title>Redirecting to PayU...</title></head>
       <body onload="document.forms[0].submit()">
         <p>Please wait, you are being redirected to the payment gateway.</p>
-        <form action="https://test.payu.in/_payment" method="post">
+        <form action="${payuUrl}" method="post">
           <input type="hidden" name="key" value="${key}" />
           <input type="hidden" name="txnid" value="${txnid}" />
           <input type="hidden" name="productinfo" value="${productinfo}" />
