@@ -2,7 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { verifySession } from '@/lib/auth';
 import { Redis } from '@upstash/redis';
-import { IP_WHITELIST, getRouteRateLimit, IP_BLOCK_COOLDOWN } from '@/lib/rate-limits';
+import { isWhitelisted, getRouteRateLimit, IP_BLOCK_COOLDOWN } from '@/lib/rate-limits';
 
 export const config = {
   matcher: '/api/:path*',
@@ -42,8 +42,8 @@ async function isIpBlocked(ip: string): Promise<boolean> {
 export async function rateLimit(req: NextRequest) {
   const ip = getClientIp(req);
 
-  // Check IP whitelist
-  if (IP_WHITELIST.has(ip)) {
+  // Check both IP and domain whitelist
+  if (isWhitelisted(req)) {
     return null;
   }
 

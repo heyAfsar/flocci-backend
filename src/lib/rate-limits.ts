@@ -5,6 +5,55 @@ export const IP_WHITELIST = new Set(
   (process.env.WHITELISTED_IPS || '').split(',').filter(Boolean)
 );
 
+// Whitelisted domains that bypass rate limiting
+export const DOMAIN_WHITELIST = new Set(
+  (process.env.WHITELISTED_DOMAINS || '').split(',').filter(Boolean)
+);
+
+// Function to check if a request should be whitelisted
+export function isWhitelisted(req: NextRequest): boolean {
+  // Get client IP
+  const forwarded = req.headers.get('x-forwarded-for');
+  const ip = forwarded ? forwarded.split(',')[0].trim() : 
+             req.headers.get('x-real-ip') || 
+             req.ip || 
+             'unknown';
+  
+  // Check IP whitelist
+  if (IP_WHITELIST.has(ip)) {
+    return true;
+  }
+  
+  // Get origin/referer for domain checking
+  const origin = req.headers.get('origin') || req.headers.get('referer');
+  
+  if (origin) {
+    try {
+      const url = new URL(origin);
+      const domain = url.hostname;
+      
+      // Check exact domain match
+      if (DOMAIN_WHITELIST.has(domain)) {
+        return true;
+      }
+      
+      // Check wildcard domain match (*.lovable.app)
+      for (const whitelistedDomain of DOMAIN_WHITELIST) {
+        if (whitelistedDomain.startsWith('*.')) {
+          const baseDomain = whitelistedDomain.slice(2);
+          if (domain.endsWith('.' + baseDomain) || domain === baseDomain) {
+            return true;
+          }
+        }
+      }
+    } catch (error) {
+      // Invalid URL, continue with other checks
+    }
+  }
+  
+  return false;
+}
+
 // Dynamic rate limits based on route patterns
 export const ROUTE_RATE_LIMITS: { [key: string]: { requests: number; window: number } } = {
   // Authentication routes - stricter limits
