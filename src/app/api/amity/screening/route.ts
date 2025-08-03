@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
-import { hashToken } from '@/lib/auth';
+import { hashToken, extractSessionToken } from '@/lib/auth';
 import path from 'path';
 import fs from 'fs';
 
 export async function GET(req: NextRequest) {
-  const sessionToken = req.cookies.get('session_token')?.value;
+  const sessionToken = extractSessionToken(req);
 
   if (!sessionToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const sessionToken = req.cookies.get('session_token')?.value;
+  const sessionToken = extractSessionToken(req);
 
   if (!sessionToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });

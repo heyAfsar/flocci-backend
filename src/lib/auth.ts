@@ -73,3 +73,29 @@ export async function verifySession(token: string): Promise<boolean> {
 
   return !!session;
 }
+
+// Extract session token from either cookies or Authorization header
+export function extractSessionToken(req: Request): string | null {
+  // First try to get from cookies (for direct API calls)
+  const cookieHeader = req.headers.get('cookie');
+  if (cookieHeader) {
+    const cookies = Object.fromEntries(
+      cookieHeader.split('; ').map(cookie => {
+        const [name, value] = cookie.split('=');
+        return [name, decodeURIComponent(value)];
+      })
+    );
+    
+    if (cookies.session_token) {
+      return cookies.session_token;
+    }
+  }
+  
+  // Then try Authorization header (for frontend requests)
+  const authHeader = req.headers.get('authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    return authHeader.substring(7); // Remove 'Bearer ' prefix
+  }
+  
+  return null;
+}

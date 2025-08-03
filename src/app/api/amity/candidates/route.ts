@@ -1,21 +1,33 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { supabaseAdmin } from '@/lib/supabase-admin';import path from 'path';
+import { supabaseAdmin } from '@/lib/supabase-admin';
+import { hashToken, extractSessionToken } from '@/lib/auth';
+import path from 'path';
 import fs from 'fs';
 
 export async function GET(req: NextRequest) {
-  const sessionToken = req.cookies.get('session_token')?.value;
+  const sessionToken = extractSessionToken(req);
 
   if (!sessionToken) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data: session, error } = await supabaseAdmin
+  const hashedToken = await hashToken(sessionToken);
+  const { data: sessions, error } = await supabaseAdmin
     .from('sessions')
     .select('custom_users(email)')
-    .eq('token', sessionToken)
-    .single();
+    .eq('token', hashedToken);
 
-  if (error || !session || session.custom_users[0]?.email !== 'placementdrive@amity.in') {
+  let email;
+  const cu = sessions && sessions.length > 0 ? sessions[0].custom_users : undefined;
+  if (cu) {
+    if (Array.isArray(cu)) {
+      email = cu[0]?.email;
+    } else {
+      email = (cu as { email: string }).email;
+    }
+  }
+
+  if (error || !sessions || sessions.length === 0 || !email || email !== 'placementdrive@amity.in') {
     return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
   }
 
