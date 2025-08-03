@@ -274,3 +274,56 @@ COMMENT ON TABLE public.job_applications IS 'Stores job application submissions'
 COMMENT ON TABLE public.contact_submissions IS 'Stores general contact form submissions';
 COMMENT ON TABLE public.company_contact_attempts IS 'Stores company contact attempts with AI email resolution';
 COMMENT ON TABLE public.system_metrics IS 'Stores system-wide metrics and statistics';
+COMMENT ON TABLE public.interview_marks IS 'Stores candidate interview marks and evaluation data';
+
+-- Interview Marks Table (for Amity recruitment)
+CREATE TABLE public.interview_marks (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    candidate_email VARCHAR(255) UNIQUE NOT NULL,
+    interview_marks JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Enable RLS for interview_marks
+ALTER TABLE public.interview_marks ENABLE ROW LEVEL SECURITY;
+
+-- Interview marks policies (restrict to authorized users only)
+CREATE POLICY "interview_marks_select_policy"
+    ON public.interview_marks FOR SELECT
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.custom_users cu
+            JOIN public.sessions s ON s.user_id = cu.id
+            WHERE cu.email = 'placementdrive@amity.in'
+            AND s.expires_at > CURRENT_TIMESTAMP
+        )
+    );
+
+CREATE POLICY "interview_marks_insert_policy"
+    ON public.interview_marks FOR INSERT
+    WITH CHECK (
+        EXISTS (
+            SELECT 1 FROM public.custom_users cu
+            JOIN public.sessions s ON s.user_id = cu.id
+            WHERE cu.email = 'placementdrive@amity.in'
+            AND s.expires_at > CURRENT_TIMESTAMP
+        )
+    );
+
+CREATE POLICY "interview_marks_update_policy"
+    ON public.interview_marks FOR UPDATE
+    USING (
+        EXISTS (
+            SELECT 1 FROM public.custom_users cu
+            JOIN public.sessions s ON s.user_id = cu.id
+            WHERE cu.email = 'placementdrive@amity.in'
+            AND s.expires_at > CURRENT_TIMESTAMP
+        )
+    );
+
+-- Add trigger for updated_at
+CREATE TRIGGER set_updated_at
+    BEFORE UPDATE ON public.interview_marks
+    FOR EACH ROW
+    EXECUTE FUNCTION handle_updated_at();

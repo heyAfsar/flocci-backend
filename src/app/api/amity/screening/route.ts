@@ -54,8 +54,37 @@ export async function GET(req: NextRequest) {
 
   const filePath = path.resolve('./src/app/api/amity/ai_screening_v3.json');
   const fileContent = fs.readFileSync(filePath, 'utf-8');
+  const data = JSON.parse(fileContent);
 
-  return NextResponse.json(JSON.parse(fileContent), {
+  // Fetch interview marks from database and merge with file data
+  try {
+    const { data: dbInterviewMarks, error: dbError } = await supabaseAdmin
+      .from('interview_marks')
+      .select('candidate_email, interview_marks');
+
+    if (!dbError && dbInterviewMarks) {
+      // Create a map of interview marks by email for quick lookup
+      const interviewMarksMap = new Map();
+      dbInterviewMarks.forEach((record: any) => {
+        interviewMarksMap.set(record.candidate_email, record.interview_marks);
+      });
+
+      // Merge database interview marks with file data
+      data.results?.forEach((candidate: any) => {
+        const dbMarks = interviewMarksMap.get(candidate.candidate_email);
+        if (dbMarks) {
+          candidate.interview_marks = dbMarks;
+        }
+      });
+    } else {
+      console.log('No database interview marks found or error:', dbError);
+    }
+  } catch (error) {
+    console.error('Error fetching interview marks from database:', error);
+    // Continue with file data only
+  }
+
+  return NextResponse.json(data, {
     headers: {
       'Access-Control-Allow-Origin': '*',
       'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',

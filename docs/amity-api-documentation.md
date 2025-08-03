@@ -366,11 +366,11 @@ curl https://apis.flocci.in/api/amity/screening \
 }
 ```
 
-#### Response (200 OK)
+#### Response (200 OK - Database Success)
 ```json
 {
   "success": true,
-  "message": "Interview marks updated successfully",
+  "message": "Interview marks updated successfully in database",
   "candidate": {
     "candidate_email": "singheesha755@gmail.com",
     "candidate_name": "Eesha Singh",
@@ -395,6 +395,17 @@ curl https://apis.flocci.in/api/amity/screening \
       "interviewer": "Test Interviewer",
       "timestamp": "2025-08-03T06:47:09.041Z"
     }
+  }
+}
+```
+
+#### Response (200 OK - File Fallback)
+```json
+{
+  "success": true,
+  "message": "Interview marks updated successfully (file fallback)",
+  "candidate": {
+    /* ... same structure as above ... */
   }
 }
 ```
@@ -511,7 +522,7 @@ curl https://apis.flocci.in/api/amity/screening \
 }
 ```
 
-**500 File Write Error (Serverless Environment)**
+**500 File Write Error (Both Database and File Failed)**
 ```bash
 # cURL Response
 < HTTP/2 500 
@@ -524,8 +535,9 @@ curl https://apis.flocci.in/api/amity/screening \
 {
   "success": false,
   "error": "Failed to persist interview marks",
-  "message": "File write failed in serverless environment - data not saved",
-  "details": "EROFS: read-only file system, open '/var/task/src/app/api/amity/ai_screening_v3.json'",
+  "message": "Both database and file storage failed",
+  "db_error": "relation \"interview_marks\" does not exist",
+  "file_error": "EROFS: read-only file system, open '/var/task/src/app/api/amity/ai_screening_v3.json'",
   "candidate_email": "singheesha755@gmail.com",
   "interview_marks": { /* ... submitted marks ... */ }
 }
