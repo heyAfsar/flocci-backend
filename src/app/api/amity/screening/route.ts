@@ -8,7 +8,14 @@ export async function GET(req: NextRequest) {
   const sessionToken = extractSessionToken(req);
 
   if (!sessionToken) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Unauthorized' }, { 
+      status: 401,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, PATCH, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   }
 
   const hashedToken = await hashToken(sessionToken);
@@ -35,20 +42,40 @@ export async function GET(req: NextRequest) {
   }
 
   if (error || !sessions || sessions.length === 0 || !email || email !== 'placementdrive@amity.in') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    return NextResponse.json({ error: 'Forbidden' }, { 
+      status: 403,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, PATCH, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   }
 
   const filePath = path.resolve('./src/app/api/amity/ai_screening_v3.json');
   const fileContent = fs.readFileSync(filePath, 'utf-8');
 
-  return NextResponse.json(JSON.parse(fileContent));
+  return NextResponse.json(JSON.parse(fileContent), {
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, PATCH, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    }
+  });
 }
 
 export async function PATCH(req: NextRequest) {
   const sessionToken = extractSessionToken(req);
 
   if (!sessionToken) {
-    return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    return NextResponse.json({ error: 'Unauthorized' }, { 
+      status: 401,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, PATCH, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   }
 
   const hashedToken = await hashToken(sessionToken);
@@ -68,14 +95,28 @@ export async function PATCH(req: NextRequest) {
   }
 
   if (error || !sessions || sessions.length === 0 || !email || email !== 'placementdrive@amity.in') {
-    return NextResponse.json({ error: 'Forbidden' }, { status: 403 });
+    return NextResponse.json({ error: 'Forbidden' }, { 
+      status: 403,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, PATCH, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   }
 
   try {
     const { candidate_email, interview_marks } = await req.json();
 
     if (!candidate_email) {
-      return NextResponse.json({ error: 'candidate_email is required' }, { status: 400 });
+      return NextResponse.json({ error: 'candidate_email is required' }, { 
+        status: 400,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, PATCH, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+      });
     }
 
     const filePath = path.resolve('./src/app/api/amity/ai_screening_v3.json');
@@ -84,7 +125,14 @@ export async function PATCH(req: NextRequest) {
 
     const candidate = data.results?.find((c: any) => c.candidate_email === candidate_email);
     if (!candidate) {
-      return NextResponse.json({ error: 'Candidate not found' }, { status: 404 });
+      return NextResponse.json({ error: 'Candidate not found' }, { 
+        status: 404,
+        headers: {
+          'Access-Control-Allow-Origin': '*',
+          'Access-Control-Allow-Methods': 'GET, PATCH, OPTIONS',
+          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        }
+      });
     }
 
     // Initialize interview_marks if it doesn't exist
@@ -105,10 +153,34 @@ export async function PATCH(req: NextRequest) {
       success: true, 
       message: 'Interview marks updated successfully',
       candidate 
+    }, {
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, PATCH, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
     });
 
   } catch (error) {
     console.error('Error updating interview marks:', error);
-    return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
+    return NextResponse.json({ error: 'Internal server error' }, { 
+      status: 500,
+      headers: {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Methods': 'GET, PATCH, OPTIONS',
+        'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+      }
+    });
   }
+}
+
+export async function OPTIONS() {
+  return new NextResponse(null, {
+    status: 200,
+    headers: {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET, PATCH, OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+    },
+  });
 }
