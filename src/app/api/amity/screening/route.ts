@@ -169,15 +169,16 @@ export async function POST(req: NextRequest) {
     } catch (fileError) {
       console.error('File operation error:', fileError);
       
-      // If file write fails (e.g., in serverless environment), still return success
-      // but indicate the limitation
+      // Return error when file write fails - data is not actually persisted
       return NextResponse.json({ 
-        success: true, 
-        message: 'Interview marks processed (file write failed in serverless environment)',
-        warning: 'Data not persisted due to read-only file system',
+        success: false,
+        error: 'Failed to persist interview marks',
+        message: 'File write failed in serverless environment - data not saved',
+        details: fileError instanceof Error ? fileError.message : 'Unknown file error',
         candidate_email,
         interview_marks
-      }, {
+      }, { 
+        status: 500,
         headers: {
           'Access-Control-Allow-Origin': '*',
           'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
