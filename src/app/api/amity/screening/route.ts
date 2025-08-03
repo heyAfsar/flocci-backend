@@ -151,20 +151,79 @@ export async function POST(req: NextRequest) {
         ...interview_marks
       };
 
-      // Try to write back to file
-      fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+      // Store interview marks in database instead of file
+      try {
+        const { data: dbResult, error: dbError } = await supabaseAdmin
+          .from('interview_marks')
+          .upsert({
+            candidate_email,
+            interview_marks: candidate.interview_marks,
+            updated_at: new Date().toISOString()
+          }, {
+            onConflict: 'candidate_email'
+          });
 
-      return NextResponse.json({ 
-        success: true, 
-        message: 'Interview marks updated successfully',
-        candidate 
-      }, {
-        headers: {
-          'Access-Control-Allow-Origin': '*',
-          'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-          'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+        if (dbError) {
+          console.error('Database error:', dbError);
+          throw new Error(`Database operation failed: ${dbError.message}`);
         }
-      });
+
+        console.log('Interview marks saved to database successfully');
+
+        return NextResponse.json({ 
+          success: true, 
+          message: 'Interview marks updated successfully in database',
+          candidate: {
+            ...candidate,
+            interview_marks: candidate.interview_marks
+          }
+        }, {
+          headers: {
+            'Access-Control-Allow-Origin': '*',
+            'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+            'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+          }
+        });
+
+      } catch (dbError) {
+        console.error('Database operation failed:', dbError);
+        
+        // Fallback: try to write to file (will fail in production but work locally)
+        try {
+          fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
+          console.log('Fallback: Saved to file successfully');
+
+          return NextResponse.json({ 
+            success: true, 
+            message: 'Interview marks updated successfully (file fallback)',
+            candidate 
+          }, {
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+              'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            }
+          });
+        } catch (fileError) {
+          // Both database and file failed
+          return NextResponse.json({ 
+            success: false,
+            error: 'Failed to persist interview marks',
+            message: 'Both database and file storage failed',
+            db_error: dbError instanceof Error ? dbError.message : 'Unknown database error',
+            file_error: fileError instanceof Error ? fileError.message : 'Unknown file error',
+            candidate_email,
+            interview_marks
+          }, { 
+            status: 500,
+            headers: {
+              'Access-Control-Allow-Origin': '*',
+              'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
+              'Access-Control-Allow-Headers': 'Content-Type, Authorization',
+            }
+          });
+        }
+      }
 
     } catch (fileError) {
       console.error('File operation error:', fileError);
