@@ -56,26 +56,6 @@
           "total": 30
         },
         "transferable_skills": "Eesha's Python and SQL skills are directly transferable to backend development tasks. Her internship experience, even if not directly aligned with our stack, demonstrates an understanding of software development workflows and collaboration."
-      },
-      "interview_marks": {
-        "technical": {
-          "core_fundamentals": 11,
-          "system_thinking": 12,
-          "problem_solving": 13
-        },
-        "gd": {
-          "content_clarity": 9,
-          "collaborative_innovation": 10,
-          "leadership_drive": 5
-        },
-        "flocci_alignment": {
-          "curiosity_proactiveness": 12,
-          "culture_fit_autonomy": 13
-        },
-        "total": 95,
-        "remarks": "Good potential with strong fundamentals.",
-        "interviewer": "Test Interviewer",
-        "timestamp": "2025-08-04T15:45:00Z"
       }
     },
     {
@@ -125,26 +105,6 @@
           "total": 30
         },
         "transferable_skills": "Satyam's full-stack experience with Javascript, React, Node.js, and CSS provides a solid foundation for contributing to our frontend and backend development. His familiarity with Git and GitHub is also valuable. While he may need to learn specific tools like Supabase and Tailwind CSS, his existing skills are highly transferable."
-      },
-      "interview_marks": {
-        "gd": {
-          "content_clarity": 8,
-          "collaborative_innovation": 9,
-          "leadership_drive": 4
-        },
-        "technical": {
-          "core_fundamentals": 12,
-          "system_thinking": 13,
-          "problem_solving": 14
-        },
-        "flocci_alignment": {
-          "curiosity_proactiveness": 13,
-          "culture_fit_autonomy": 14
-        },
-        "total": 91,
-        "remarks": "Strong technical and team skills.",
-        "interviewer": "Afsar Hussain",
-        "timestamp": "2025-08-04T14:30:00Z"
       }
     },
     {
