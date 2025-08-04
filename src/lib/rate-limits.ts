@@ -56,9 +56,9 @@ export function isWhitelisted(req: NextRequest): boolean {
 
 // Dynamic rate limits based on route patterns
 export const ROUTE_RATE_LIMITS: { [key: string]: { requests: number; window: number } } = {
-  // Authentication routes - stricter limits
-  '/api/login': { requests: 5, window: 300 }, // 5 requests per 5 minutes
-  '/api/signup': { requests: 3, window: 300 }, // 3 requests per 5 minutes
+  // Authentication routes - more lenient for multiple devices
+  '/api/login': { requests: 15, window: 300 }, // 15 requests per 5 minutes (allowing for multiple devices)
+  '/api/signup': { requests: 5, window: 300 }, // 5 requests per 5 minutes
   
   // Payment routes - moderate limits
   '/api/payments/initiate': { requests: 10, window: 300 }, // 10 requests per 5 minutes
@@ -71,7 +71,8 @@ export const ROUTE_RATE_LIMITS: { [key: string]: { requests: number; window: num
 };
 
 // Cool-down period for blocked IPs (in seconds)
-export const IP_BLOCK_COOLDOWN = 3600; // 1 hour
+export const IP_BLOCK_COOLDOWN = 900; // 15 minutes instead of 1 hour
+export const AUTH_BLOCK_COOLDOWN = 300; // 5 minutes for auth-related blocks
 
 export function getRouteRateLimit(req: NextRequest) {
   const path = new URL(req.url).pathname;
