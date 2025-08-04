@@ -608,63 +608,6 @@
       }
     },
     {
-      "candidate_email": "afsar@flocci.in",
-      "candidate_name": "Md. Afsar Hussain",
-      "email_date": "",
-      "email_id": "",
-      "email_subject": "",
-      "from": "",
-      "screening_result": {
-        "adaptability_growth": {
-          "communication_collaboration": 5,
-          "learning_agility": 6,
-          "total": 11
-        },
-        "areas_for_development": [
-          "React.js experience",
-          "AI/ML toolchain knowledge",
-          "Microservice architecture understanding"
-        ],
-        "bias_detection": {
-          "bias_corrected": true,
-          "biases_detected": [
-            "Email domain/company bias detected"
-          ],
-          "corrections_applied": [],
-          "original_score": 68
-        },
-        "confidence_level": "MEDIUM",
-        "cultural_fit": {
-          "startup_mindset": 4,
-          "tech_passion": 5,
-          "total": 9
-        },
-        "detailed_feedback": "Afsar possesses a good foundation in programming fundamentals and backend development. While his experience with the specific technologies used at Flocci (React, Node.js, AI/ML tools) is limited, his transferable skills and willingness to learn make him a promising candidate. An interview would be beneficial to assess his problem-solving abilities and learning agility in more detail. Focus on probing his understanding of RESTful APIs, microservices, and his approach to learning new frameworks.\n\n[BIAS CORRECTION APPLIED: ]",
-        "experience_quality": {
-          "code_quality": 3,
-          "problem_solving": 2,
-          "project_experience": 10,
-          "total": 15
-        },
-        "growth_potential": "Afsar demonstrates a willingness to learn new technologies. With guidance and mentorship, he can quickly adapt to the Flocci tech stack and contribute meaningfully to the team. His enterprise experience can bring valuable insights into building scalable and reliable systems.",
-        "key_strengths": [
-          "Strong programming fundamentals in Java and JavaScript",
-          "Experience with backend frameworks (Spring)",
-          "Familiarity with databases (MongoDB, MySQL)"
-        ],
-        "overall_score": 68,
-        "recommendation": "INTERVIEW",
-        "technical_competence": {
-          "ai_ml_potential": 4,
-          "development_skills": 10,
-          "programming_fundamentals": 16,
-          "system_understanding": 3,
-          "total": 33
-        },
-        "transferable_skills": "Afsar's experience with Java, Spring, and SQL databases provides a solid foundation for backend development. His Angular experience can be leveraged to learn React.js quickly. His familiarity with Git and Jira will be valuable in a collaborative environment."
-      }
-    },
-    {
       "candidate_email": "juhikumari821048@gmail.com",
       "candidate_name": "Juhi Kumari",
       "email_date": "",
