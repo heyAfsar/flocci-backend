@@ -10,6 +10,9 @@ const supabaseAdmin = createClient(
 
 export async function GET(req: NextRequest) {
   console.log("=== AUTH CALLBACK CALLED ===");
+  console.log("Request URL:", req.url);
+  console.log("Request headers host:", req.headers.get('host'));
+  
   try {
     const { searchParams } = new URL(req.url);
     const code = searchParams.get('code');
@@ -18,12 +21,16 @@ export async function GET(req: NextRequest) {
     // Frontend URL for redirects
     const frontendUrl = process.env.FRONTEND_URL || 'https://flocci.in';
 
+    console.log("Code:", code);
+    console.log("Error:", error);
+
     if (error) {
       console.error("OAuth error:", error);
       return NextResponse.redirect(`${frontendUrl}/login?error=${error}`);
     }
 
     if (!code) {
+      console.error("No code provided");
       return NextResponse.redirect(`${frontendUrl}/login?error=no_code`);
     }
 
