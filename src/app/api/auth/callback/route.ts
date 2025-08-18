@@ -10,19 +10,13 @@ const supabaseAdmin = createClient(
 
 export async function GET(req: NextRequest) {
   console.log("=== AUTH CALLBACK CALLED ===");
-  console.log("Request URL:", req.url);
-  console.log("Request headers host:", req.headers.get('host'));
-  
   try {
     const { searchParams } = new URL(req.url);
     const code = searchParams.get('code');
     const error = searchParams.get('error');
 
     // Frontend URL for redirects
-    const frontendUrl = process.env.FRONTEND_URL || 'https://flocci.in';
-
-    console.log("Code:", code);
-    console.log("Error:", error);
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8081';
 
     if (error) {
       console.error("OAuth error:", error);
@@ -30,7 +24,6 @@ export async function GET(req: NextRequest) {
     }
 
     if (!code) {
-      console.error("No code provided");
       return NextResponse.redirect(`${frontendUrl}/login?error=no_code`);
     }
 
@@ -53,8 +46,6 @@ export async function GET(req: NextRequest) {
                     data.user.user_metadata?.name || 
                     data.user.email?.split('@')[0] || 'User',
           email: data.user.email,
-          avatar_url: data.user.user_metadata?.avatar_url || 
-                     data.user.user_metadata?.picture || null,
           phone: data.user.user_metadata?.phone || null,
           company_name: null,
           role: 'user',
@@ -89,21 +80,41 @@ export async function GET(req: NextRequest) {
         }
       } catch (profileErr) {
         console.error("Profile processing error:", profileErr);
+        
+        // Last resort: simple insert with minimal data
+        try {
+          await supabaseAdmin
+            .from('profiles')
+            .insert({
+              id: data.user.id,
+              full_name: data.user.user_metadata?.name || 'User',
+              email: data.user.email,
+              role: 'user'
+            });
+          console.log("Profile created with minimal data for user:", data.user.id);
+        } catch (finalErr) {
+          console.error("Final profile creation attempt failed:", finalErr);
+        }
       }
     }
 
-    // Create session token and redirect with it
-    const sessionToken = data.session?.access_token;
-    const refreshToken = data.session?.refresh_token;
+    // Successful OAuth login - redirect to clean dashboard URL
+    const response = NextResponse.redirect(`${frontendUrl}/dashboard`);
     
-    // Redirect to dashboard with session info as URL params (temporarily)
-    const redirectUrl = `${frontendUrl}/dashboard?session=${encodeURIComponent(sessionToken || '')}&refresh=${encodeURIComponent(refreshToken || '')}&user_id=${data.user?.id || ''}`;
-    
-    return NextResponse.redirect(redirectUrl);
+    // Set session cookie for additional security
+    if (data.session) {
+      response.cookies.set('supabase_session', data.session.access_token, {
+        httpOnly: true,
+        secure: process.env.NODE_ENV === 'production',
+        sameSite: 'lax',
+        maxAge: data.session.expires_in || 3600
+      });
+    }
+
+    return response;
 
   } catch (e) {
     console.error("Auth callback error:", e);
-    const frontendUrl = process.env.FRONTEND_URL || 'https://flocci.in';
-    return NextResponse.redirect(`${frontendUrl}/login?error=callback_failed`);
+    return NextResponse.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8081'}/login?error=callback_failed`);
   }
 }

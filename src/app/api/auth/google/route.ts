@@ -4,13 +4,10 @@ import { NextRequest, NextResponse } from 'next/server';
 export async function POST(req: NextRequest) {
   console.log("=== GOOGLE LOGIN API CALLED ===");
   try {
-    // Get backend URL for callback
-    const backendUrl = process.env.APP_URL || 'https://apis.flocci.in';
-    
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${backendUrl}/api/auth/callback`,
+        redirectTo: `${process.env.APP_URL || 'http://localhost:3000'}/api/auth/callback`,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',

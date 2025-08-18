@@ -42,7 +42,6 @@ export async function GET(req: NextRequest) {
         id: user.id,
         full_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
         email: user.email,
-        avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture || null,
         phone: user.user_metadata?.phone || null,
         company_name: null,
         role: 'user',
@@ -65,7 +64,7 @@ export async function GET(req: NextRequest) {
         id: user.id,
         email: user.email,
         name: createdProfile.full_name,
-        avatar_url: createdProfile.avatar_url || user.user_metadata?.avatar_url || user.user_metadata?.picture,
+        avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture,
         role: createdProfile.role,
         phone: createdProfile.phone,
         company_name: createdProfile.company_name,
@@ -122,7 +121,7 @@ export async function PUT(req: NextRequest) {
 
     // Parse request body
     const body = await req.json();
-    const { full_name, phone, company_name, avatar_url } = body;
+    const { full_name, phone, company_name } = body;
 
     // Update profile in profiles table
     const { data: updatedProfile, error: updateError } = await supabaseAdmin
@@ -131,7 +130,6 @@ export async function PUT(req: NextRequest) {
         full_name,
         phone,
         company_name,
-        avatar_url,
         updated_at: new Date().toISOString()
       })
       .eq('id', user.id)
