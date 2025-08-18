@@ -7,7 +7,7 @@ export async function POST(req: NextRequest) {
     const { data, error } = await supabase.auth.signInWithOAuth({
       provider: 'google',
       options: {
-        redirectTo: `${process.env.APP_URL || 'http://localhost:3000'}/api/auth/callback`,
+        redirectTo: `https://apis.flocci.in/api/auth/callback`,
         queryParams: {
           access_type: 'offline',
           prompt: 'consent',

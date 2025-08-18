@@ -16,7 +16,7 @@ export async function GET(req: NextRequest) {
     const error = searchParams.get('error');
 
     // Frontend URL for redirects
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8081';
+    const frontendUrl = process.env.FRONTEND_URL || 'https://flocci.in';
 
     if (error) {
       console.error("OAuth error:", error);
@@ -82,43 +82,21 @@ export async function GET(req: NextRequest) {
         }
       } catch (profileErr) {
         console.error("Profile processing error:", profileErr);
-        
-        // Last resort: simple insert with minimal data
-        try {
-          await supabaseAdmin
-            .from('profiles')
-            .insert({
-              id: data.user.id,
-              full_name: data.user.user_metadata?.name || 'User',
-              email: data.user.email,
-              avatar_url: data.user.user_metadata?.avatar_url || 
-                         data.user.user_metadata?.picture || null,
-              role: 'user'
-            });
-          console.log("Profile created with minimal data for user:", data.user.id);
-        } catch (finalErr) {
-          console.error("Final profile creation attempt failed:", finalErr);
-        }
       }
     }
 
-    // Successful OAuth login - redirect to clean dashboard URL
-    const response = NextResponse.redirect(`${frontendUrl}/dashboard`);
+    // Create session token and redirect with it
+    const sessionToken = data.session?.access_token;
+    const refreshToken = data.session?.refresh_token;
     
-    // Set session cookie for additional security
-    if (data.session) {
-      response.cookies.set('supabase_session', data.session.access_token, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: data.session.expires_in || 3600
-      });
-    }
-
-    return response;
+    // Redirect to dashboard with session info as URL params (temporarily)
+    const redirectUrl = `${frontendUrl}/dashboard?session=${encodeURIComponent(sessionToken || '')}&refresh=${encodeURIComponent(refreshToken || '')}&user_id=${data.user?.id || ''}`;
+    
+    return NextResponse.redirect(redirectUrl);
 
   } catch (e) {
     console.error("Auth callback error:", e);
-    return NextResponse.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8081'}/login?error=callback_failed`);
+    const frontendUrl = process.env.FRONTEND_URL || 'https://flocci.in';
+    return NextResponse.redirect(`${frontendUrl}/login?error=callback_failed`);
   }
 }
