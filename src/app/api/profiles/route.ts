@@ -34,9 +34,45 @@ export async function GET(req: NextRequest) {
       .eq('id', user.id)
       .single();
 
-    if (profileError) {
-      console.error("Profile fetch error:", profileError);
-      return NextResponse.json({ error: 'Profile not found' }, { status: 404 });
+    if (profileError || !profile) {
+      console.log("Profile not found, creating one for user:", user.id);
+      
+      // Create profile if it doesn't exist
+      const newProfile = {
+        id: user.id,
+        full_name: user.user_metadata?.full_name || user.user_metadata?.name || user.email?.split('@')[0] || 'User',
+        email: user.email,
+        phone: user.user_metadata?.phone || null,
+        company_name: null,
+        role: 'user',
+        updated_at: new Date().toISOString()
+      };
+
+      const { data: createdProfile, error: createError } = await supabaseAdmin
+        .from('profiles')
+        .insert(newProfile)
+        .select()
+        .single();
+
+      if (createError) {
+        console.error("Failed to create profile:", createError);
+        return NextResponse.json({ error: 'Failed to create profile' }, { status: 500 });
+      }
+
+      // Return the newly created profile
+      const fullProfile = {
+        id: user.id,
+        email: user.email,
+        name: createdProfile.full_name,
+        avatar_url: user.user_metadata?.avatar_url || user.user_metadata?.picture,
+        role: createdProfile.role,
+        phone: createdProfile.phone,
+        company_name: createdProfile.company_name,
+        created_at: createdProfile.created_at,
+        updated_at: createdProfile.updated_at
+      };
+
+      return NextResponse.json(fullProfile, { status: 200 });
     }
 
     // Combine auth user data with profile data

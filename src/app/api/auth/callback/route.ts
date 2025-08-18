@@ -37,44 +37,64 @@ export async function GET(req: NextRequest) {
     // Ensure profile exists for the user
     if (data.user) {
       try {
-        console.log("Creating/updating profile for user:", data.user.id);
+        console.log("Processing profile for user:", data.user.id, data.user.email);
         
-        // Check if profile exists
-        const { data: profile } = await supabaseAdmin
+        // Always try to create/update profile for Google OAuth users
+        const profileData = {
+          id: data.user.id,
+          full_name: data.user.user_metadata?.full_name || 
+                    data.user.user_metadata?.name || 
+                    data.user.email?.split('@')[0] || 'User',
+          email: data.user.email,
+          phone: data.user.user_metadata?.phone || null,
+          company_name: null,
+          role: 'user',
+          updated_at: new Date().toISOString()
+        };
+
+        // Use upsert to either insert new or update existing profile
+        const { data: profile, error: profileError } = await supabaseAdmin
           .from('profiles')
-          .select('id')
-          .eq('id', data.user.id)
+          .upsert(profileData, { 
+            onConflict: 'id',
+            ignoreDuplicates: false 
+          })
+          .select()
           .single();
 
-        // If no profile exists, create one
-        if (!profile) {
-          const profileData = {
-            id: data.user.id,
-            full_name: data.user.user_metadata?.full_name || 
-                      data.user.user_metadata?.name || 
-                      data.user.email?.split('@')[0] || 'User',
-            email: data.user.email,
-            avatar_url: data.user.user_metadata?.avatar_url || 
-                       data.user.user_metadata?.picture,
-            role: 'user'
-          };
-
-          const { error: profileError } = await supabaseAdmin
+        if (profileError) {
+          console.error("Profile upsert error:", profileError);
+          
+          // Fallback: try just insert if upsert fails
+          const { error: insertError } = await supabaseAdmin
             .from('profiles')
             .insert(profileData);
-
-          if (profileError) {
-            console.error("Profile creation error:", profileError);
-            // Don't fail the login, just log the error
+            
+          if (insertError && !insertError.message.includes('duplicate')) {
+            console.error("Profile insert fallback error:", insertError);
           } else {
-            console.log("Profile created successfully for user:", data.user.id);
+            console.log("Profile created via fallback insert for user:", data.user.id);
           }
         } else {
-          console.log("Profile already exists for user:", data.user.id);
+          console.log("Profile upserted successfully for user:", data.user.id);
         }
       } catch (profileErr) {
-        console.error("Profile check/creation error:", profileErr);
-        // Don't fail the login
+        console.error("Profile processing error:", profileErr);
+        
+        // Last resort: simple insert with minimal data
+        try {
+          await supabaseAdmin
+            .from('profiles')
+            .insert({
+              id: data.user.id,
+              full_name: data.user.user_metadata?.name || 'User',
+              email: data.user.email,
+              role: 'user'
+            });
+          console.log("Profile created with minimal data for user:", data.user.id);
+        } catch (finalErr) {
+          console.error("Final profile creation attempt failed:", finalErr);
+        }
       }
     }
 
