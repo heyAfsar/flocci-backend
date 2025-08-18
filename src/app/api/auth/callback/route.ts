@@ -46,6 +46,8 @@ export async function GET(req: NextRequest) {
                     data.user.user_metadata?.name || 
                     data.user.email?.split('@')[0] || 'User',
           email: data.user.email,
+          avatar_url: data.user.user_metadata?.avatar_url || 
+                     data.user.user_metadata?.picture || null,
           phone: data.user.user_metadata?.phone || null,
           company_name: null,
           role: 'user',
@@ -89,6 +91,8 @@ export async function GET(req: NextRequest) {
               id: data.user.id,
               full_name: data.user.user_metadata?.name || 'User',
               email: data.user.email,
+              avatar_url: data.user.user_metadata?.avatar_url || 
+                         data.user.user_metadata?.picture || null,
               role: 'user'
             });
           console.log("Profile created with minimal data for user:", data.user.id);
