@@ -15,25 +15,30 @@ export async function GET(req: NextRequest) {
     const code = searchParams.get('code');
     const error = searchParams.get('error');
 
+    // Frontend URL for redirects
+    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8081';
+
     if (error) {
       console.error("OAuth error:", error);
-      return NextResponse.redirect(`${process.env.APP_URL || 'http://localhost:3000'}?error=${error}`);
+      return NextResponse.redirect(`${frontendUrl}/login?error=${error}`);
     }
 
     if (!code) {
-      return NextResponse.redirect(`${process.env.APP_URL || 'http://localhost:3000'}?error=no_code`);
+      return NextResponse.redirect(`${frontendUrl}/login?error=no_code`);
     }
 
     const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
     
     if (exchangeError) {
       console.error("Code exchange error:", exchangeError);
-      return NextResponse.redirect(`${process.env.APP_URL || 'http://localhost:3000'}?error=exchange_failed`);
+      return NextResponse.redirect(`${frontendUrl}/login?error=exchange_failed`);
     }
 
     // Ensure profile exists for the user
     if (data.user) {
       try {
+        console.log("Creating/updating profile for user:", data.user.id);
+        
         // Check if profile exists
         const { data: profile } = await supabaseAdmin
           .from('profiles')
@@ -43,20 +48,29 @@ export async function GET(req: NextRequest) {
 
         // If no profile exists, create one
         if (!profile) {
+          const profileData = {
+            id: data.user.id,
+            full_name: data.user.user_metadata?.full_name || 
+                      data.user.user_metadata?.name || 
+                      data.user.email?.split('@')[0] || 'User',
+            email: data.user.email,
+            avatar_url: data.user.user_metadata?.avatar_url || 
+                       data.user.user_metadata?.picture,
+            role: 'user'
+          };
+
           const { error: profileError } = await supabaseAdmin
             .from('profiles')
-            .insert({
-              id: data.user.id,
-              full_name: data.user.user_metadata?.full_name || 
-                        data.user.user_metadata?.name || 
-                        data.user.email?.split('@')[0] || 'User',
-              role: 'user'
-            });
+            .insert(profileData);
 
           if (profileError) {
             console.error("Profile creation error:", profileError);
             // Don't fail the login, just log the error
+          } else {
+            console.log("Profile created successfully for user:", data.user.id);
           }
+        } else {
+          console.log("Profile already exists for user:", data.user.id);
         }
       } catch (profileErr) {
         console.error("Profile check/creation error:", profileErr);
@@ -64,10 +78,10 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Successful OAuth login - redirect to success page or dashboard
-    const response = NextResponse.redirect(`${process.env.APP_URL || 'http://localhost:3000'}/dashboard?login=success`);
+    // Successful OAuth login - redirect to clean dashboard URL
+    const response = NextResponse.redirect(`${frontendUrl}/dashboard`);
     
-    // Set session cookie
+    // Set session cookie for additional security
     if (data.session) {
       response.cookies.set('supabase_session', data.session.access_token, {
         httpOnly: true,
@@ -81,6 +95,6 @@ export async function GET(req: NextRequest) {
 
   } catch (e) {
     console.error("Auth callback error:", e);
-    return NextResponse.redirect(`${process.env.APP_URL || 'http://localhost:3000'}?error=callback_failed`);
+    return NextResponse.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8081'}/login?error=callback_failed`);
   }
 }
