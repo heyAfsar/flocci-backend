@@ -11,16 +11,9 @@ const supabaseAdmin = createClient(
 export async function GET(req: NextRequest) {
   console.log("=== AUTH CALLBACK CALLED ===");
   try {
-    const url = new URL(req.url);
-    const { searchParams } = url;
-    let code = searchParams.get('code');
+    const { searchParams } = new URL(req.url);
+    const code = searchParams.get('code');
     const error = searchParams.get('error');
-
-    // If code not in query, check hash
-    if (!code && url.hash) {
-      const hashParams = new URLSearchParams(url.hash.substring(1));
-      code = hashParams.get('code');
-    }
 
     // Frontend URL for redirects
     const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8081';
