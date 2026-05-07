@@ -1,6 +1,5 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { verifySession } from '@/lib/auth';
 import { Redis } from '@upstash/redis';
 import { isWhitelisted, getRouteRateLimit, IP_BLOCK_COOLDOWN, DOMAIN_WHITELIST } from '@/lib/rate-limits';
 
@@ -186,6 +185,18 @@ export async function rateLimit(req: NextRequest) {
 }
 
 export async function withAuth(req: NextRequest) {
+  let verifySession: ((token: string) => Promise<boolean>) | null = null;
+  try {
+    const auth = await import('@/lib/auth');
+    verifySession = auth.verifySession;
+  } catch (error) {
+    console.error('Auth module failed to load in middleware:', error);
+    return new NextResponse(
+      JSON.stringify({ error: 'Auth service unavailable' }),
+      { status: 503 }
+    );
+  }
+
   const token = req.cookies.get('session_token')?.value;
   
   if (!token || !(await verifySession(token))) {
