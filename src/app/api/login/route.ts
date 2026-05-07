@@ -17,6 +17,7 @@ const loginSchema = z.object({
 export async function POST(req: NextRequest) {
   console.log("=== LOGIN API CALLED ===");
   try {
+    const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
     const body = await req.json();
     const parseResult = loginSchema.safeParse(body);
 
@@ -63,6 +64,7 @@ export async function POST(req: NextRequest) {
       httpOnly: true,
       secure: process.env.NODE_ENV === 'production',
       sameSite: 'lax',
+      domain: cookieDomain,
       maxAge: 7 * 24 * 60 * 60 // 7 days
     });
 

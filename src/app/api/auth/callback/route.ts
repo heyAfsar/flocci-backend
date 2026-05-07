@@ -11,6 +11,7 @@ const supabaseAdmin = createClient(
 export async function GET(req: NextRequest) {
   console.log("=== AUTH CALLBACK CALLED ===");
   try {
+    const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
     const { searchParams } = new URL(req.url);
     const code = searchParams.get('code');
     const error = searchParams.get('error');
@@ -107,6 +108,7 @@ export async function GET(req: NextRequest) {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
+        domain: cookieDomain,
         maxAge: data.session.expires_in || 3600
       });
     }
