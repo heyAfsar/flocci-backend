@@ -58,10 +58,11 @@ export default function APIDocsPage() {
           <div>
             <h3 className="font-semibold mb-2">💳 Payments</h3>
             <ul className="text-sm space-y-1 ml-4">
-              <li>• POST /api/payments/initiate - Start payment</li>
-              <li>• POST /api/payments/callback - PayU callback</li>
-              <li>• GET /api/payments/success - Success page</li>
-              <li>• GET /api/payments/failure - Failure page</li>
+              <li>• POST /api/payments/initiate - Start payment (dynamic callbacks, udf1-5 passthrough)</li>
+              <li>• POST /api/payments/callback - PayU server callback</li>
+              <li>• GET /api/payments/success - Success page redirect</li>
+              <li>• GET /api/payments/failure - Failure page redirect</li>
+              <li>• GET /api/payments/status/:txnid - Order status lookup (internal)</li>
             </ul>
           </div>
           <div>
@@ -304,6 +305,41 @@ export default function APIDocsPage() {
                       amount: "100.00",
                       status: "failure",
                       error: "error_message"
+                    }, null, 2)}
+                  </pre>
+                </div>
+              </Card>
+
+              <Card className="p-4 border-l-4 border-purple-500">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded text-xs font-medium">GET</span>
+                  <h3 className="text-lg font-bold">/api/payments/status/:txnid</h3>
+                </div>
+                <p className="text-sm text-gray-600 mt-2">
+                  Look up order status by transaction ID. Intended for internal service-to-service use (e.g. AI Kids backend cross-checking payment outcomes).
+                  Optionally protected by <code className="bg-gray-100 px-1 rounded">x-payment-status-key</code> header when <code className="bg-gray-100 px-1 rounded">PAYMENT_STATUS_API_KEY</code> env var is set.
+                </p>
+                <div className="mt-4">
+                  <h4 className="font-semibold">Headers (optional):</h4>
+                  <pre className="bg-gray-100 p-2 rounded mt-2">
+                    {`x-payment-status-key: <shared_secret>`}
+                  </pre>
+                </div>
+                <div className="mt-4">
+                  <h4 className="font-semibold">Response (200):</h4>
+                  <pre className="bg-gray-100 p-2 rounded mt-2">
+                    {JSON.stringify({
+                      txnid: "flocci-uuid-txnid",
+                      status: "COMPLETED",
+                      amount: 999,
+                      currency: "INR",
+                      productinfo: "AI Kids Workshop – July 2025",
+                      firstname: "Afsar",
+                      email: "afsar@example.com",
+                      phone: "+919876543210",
+                      providerResponse: {},
+                      createdAt: "2025-07-01T10:00:00Z",
+                      updatedAt: "2025-07-01T10:05:00Z"
                     }, null, 2)}
                   </pre>
                 </div>
