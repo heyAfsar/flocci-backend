@@ -8,10 +8,31 @@ export const config = {
   matcher: '/api/:path*',
 };
 
-const redis = new Redis({
-  url: process.env.UPSTASH_REDIS_URL!,
-  token: process.env.UPSTASH_REDIS_TOKEN!,
-});
+let redisClient: Redis | null | undefined;
+
+function getRedisClient(): Redis | null {
+  if (redisClient !== undefined) {
+    return redisClient;
+  }
+
+  const url = process.env.UPSTASH_REDIS_URL;
+  const token = process.env.UPSTASH_REDIS_TOKEN;
+
+  if (!url || !token) {
+    console.warn('Rate limiting disabled: UPSTASH_REDIS_URL or UPSTASH_REDIS_TOKEN is not set');
+    redisClient = null;
+    return redisClient;
+  }
+
+  try {
+    redisClient = new Redis({ url, token });
+    return redisClient;
+  } catch (error) {
+    console.error('Rate limiting disabled: failed to initialize Redis client', error);
+    redisClient = null;
+    return redisClient;
+  }
+}
 
 // CORS configuration
 function getCorsHeaders(origin: string | null): Headers {
@@ -72,6 +93,9 @@ function getClientIp(req: NextRequest): string {
 }
 
 async function isIpBlocked(ip: string): Promise<boolean> {
+  const redis = getRedisClient();
+  if (!redis) return false;
+
   const blockedAt = await redis.get(`blocked:${ip}`);
   if (!blockedAt) return false;
 
@@ -89,6 +113,12 @@ async function isIpBlocked(ip: string): Promise<boolean> {
 }
 
 export async function rateLimit(req: NextRequest) {
+  const redis = getRedisClient();
+  if (!redis) {
+    // Fail open if Redis is not configured so core APIs keep working.
+    return null;
+  }
+
   const ip = getClientIp(req);
 
   // Check both IP and domain whitelist
