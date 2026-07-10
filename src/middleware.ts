@@ -197,8 +197,9 @@ export async function withAuth(req: NextRequest) {
     );
   }
 
-  const token = req.cookies.get('session_token')?.value;
-  
+  // Accept the app cookie or the platform SSO cookie (Domain=.flocci.in).
+  const token = req.cookies.get('session_token')?.value || req.cookies.get('flocci_token')?.value;
+
   if (!token || !(await verifySession(token))) {
     return new NextResponse(
       JSON.stringify({ error: 'Unauthorized' }),
@@ -216,46 +217,55 @@ export default async function middleware(req: NextRequest) {
   }
 
   const origin = req.headers.get('origin');
-  
-  // Handle preflight OPTIONS requests
-  if (req.method === 'OPTIONS') {
-    const corsHeaders = getCorsHeaders(origin);
-    return new NextResponse(null, {
-      status: 200,
-      headers: corsHeaders,
-    });
-  }
 
-  // Check rate limits first
-  const rateLimitResponse = await rateLimit(req);
-  if (rateLimitResponse) {
-    // Add CORS headers to rate limit responses
-    const corsHeaders = getCorsHeaders(origin);
-    corsHeaders.forEach((value, key) => {
-      rateLimitResponse.headers.set(key, value);
-    });
-    return rateLimitResponse;
-  }
+  // FAIL-OPEN HARDENING: a crash anywhere in here used to take the ENTIRE
+  // API down (MIDDLEWARE_INVOCATION_FAILED on every route — the 2026-07
+  // production outage). Rate limiting and CORS decoration are best-effort;
+  // the request must always be able to proceed to its route handler.
+  try {
+    // Handle preflight OPTIONS requests
+    if (req.method === 'OPTIONS') {
+      const corsHeaders = getCorsHeaders(origin);
+      return new NextResponse(null, {
+        status: 200,
+        headers: corsHeaders,
+      });
+    }
 
-  // Then check auth for protected routes
-  if (req.nextUrl.pathname.startsWith('/api/admin')) {
-    const authResponse = await withAuth(req);
-    if (authResponse) {
-      // Add CORS headers to auth error responses
+    // Check rate limits first
+    const rateLimitResponse = await rateLimit(req);
+    if (rateLimitResponse) {
+      // Add CORS headers to rate limit responses
       const corsHeaders = getCorsHeaders(origin);
       corsHeaders.forEach((value, key) => {
-        authResponse.headers.set(key, value);
+        rateLimitResponse.headers.set(key, value);
       });
-      return authResponse;
+      return rateLimitResponse;
     }
-  }
 
-  // Continue with the request and add CORS headers to the response
-  const response = NextResponse.next();
-  const corsHeaders = getCorsHeaders(origin);
-  corsHeaders.forEach((value, key) => {
-    response.headers.set(key, value);
-  });
-  
-  return response;
+    // Then check auth for protected routes
+    if (req.nextUrl.pathname.startsWith('/api/admin')) {
+      const authResponse = await withAuth(req);
+      if (authResponse) {
+        // Add CORS headers to auth error responses
+        const corsHeaders = getCorsHeaders(origin);
+        corsHeaders.forEach((value, key) => {
+          authResponse.headers.set(key, value);
+        });
+        return authResponse;
+      }
+    }
+
+    // Continue with the request and add CORS headers to the response
+    const response = NextResponse.next();
+    const corsHeaders = getCorsHeaders(origin);
+    corsHeaders.forEach((value, key) => {
+      response.headers.set(key, value);
+    });
+
+    return response;
+  } catch (error) {
+    console.error('Middleware error (failing open):', error);
+    return NextResponse.next();
+  }
 }

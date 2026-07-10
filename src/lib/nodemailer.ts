@@ -1,41 +1,92 @@
 import nodemailer from 'nodemailer';
 
+/**
+ * Email — adopted onto the shared Flocci notification service (via the
+ * public gateway) with the previous SMTP transport kept as the fallback:
+ *   - notification service handles plain HTML sends (contact forms etc.)
+ *   - messages WITH ATTACHMENTS (careers résumés) stay on SMTP — the
+ *     notification contract has no attachment support yet
+ *   - if the gateway isn't configured or the send fails, fall back to SMTP
+ * The exported surface (`transporter.sendMail(mailOptions(...))`) is
+ * unchanged, so all six form routes keep working untouched.
+ */
+
 const host = process.env.SMTP_HOST;
 const port = process.env.SMTP_PORT;
 const user = process.env.SMTP_USER;
 const pass = process.env.SMTP_PASS;
 
-if (!host || !port || !user || !pass) {
-  console.warn(
-    "SMTP environment variables (SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS) are not fully configured. Email sending will likely fail."
-  );
-}
-
-export const transporter = nodemailer.createTransport({
+const smtpTransporter = nodemailer.createTransport({
   host: host,
   port: Number(port),
-  secure: Number(port) === 465, // true for 465, false for other ports like 587
-  auth: {
-    user: user,
-    pass: pass,
-  },
-  // Add a timeout to prevent hanging indefinitely
-  connectionTimeout: 5000, // 5 seconds
-  greetingTimeout: 5000, // 5 seconds
-  socketTimeout: 5000, // 5 seconds
+  secure: Number(port) === 465,
+  auth: { user, pass },
+  connectionTimeout: 5000,
+  greetingTimeout: 5000,
+  socketTimeout: 5000,
 });
 
-export const mailOptions = (to: string, subject: string, html: string) => {
-  if (!process.env.SMTP_USER) {
-     // This indicates a critical configuration error if SMTP_USER is missing for the 'from' field.
-    throw new Error("SMTP_USER environment variable is not set. Cannot determine email sender.");
+type MailOpts = {
+  from?: string;
+  to: string;
+  bcc?: string;
+  subject: string;
+  html: string;
+  attachments?: unknown[];
+};
+
+const gatewayUrl = () => (process.env.FLOCCI_GATEWAY_URL || '').replace(/\/$/, '');
+const notificationsEnabled = () => Boolean(gatewayUrl() && process.env.FLOCCI_SERVICE_KEY);
+
+async function sendViaNotificationService(opts: MailOpts): Promise<{ messageId: string }> {
+  const res = await fetch(`${gatewayUrl()}/api/notifications/v1/email/send`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'X-Flocci-Service-Key': process.env.FLOCCI_SERVICE_KEY as string,
+    },
+    body: JSON.stringify({
+      app_id: 'official-website',
+      to: opts.to,
+      bcc: opts.bcc || undefined,
+      subject: opts.subject,
+      html: opts.html,
+      idempotency_key: `official-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`,
+    }),
+    cache: 'no-store',
+  });
+  if (!res.ok) {
+    const body = await res.text().catch(() => '');
+    throw new Error(`notification-service ${res.status}: ${body.slice(0, 200)}`);
+  }
+  const body = (await res.json().catch(() => ({}))) as { id?: string; message_id?: string };
+  return { messageId: body.id || body.message_id || 'notification-service' };
+}
+
+export const transporter = {
+  async sendMail(opts: MailOpts) {
+    const hasAttachments = Array.isArray(opts.attachments) && opts.attachments.length > 0;
+    if (notificationsEnabled() && !hasAttachments) {
+      try {
+        return await sendViaNotificationService(opts);
+      } catch (e) {
+        console.error('notification-service send failed, falling back to SMTP:', e);
+      }
+    }
+    return smtpTransporter.sendMail(opts as Parameters<typeof smtpTransporter.sendMail>[0]);
+  },
+};
+
+export const mailOptions = (to: string, subject: string, html: string): MailOpts => {
+  if (!process.env.SMTP_USER && !notificationsEnabled()) {
+    throw new Error('Neither SMTP_USER nor the Flocci gateway is configured. Cannot send email.');
   }
   return {
-    from: process.env.SMTP_USER, // Sender address
-    to, // List of receivers
-    bcc: process.env.SMTP_BCC, // BCC address if provided
-    subject, // Subject line
-    html, // HTML body content
+    from: process.env.SMTP_USER,
+    to,
+    bcc: process.env.SMTP_BCC,
+    subject,
+    html,
   };
 };
 

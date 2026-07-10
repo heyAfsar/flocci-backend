@@ -1,15 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { createClient } from '@supabase/supabase-js';
+import { identityEnabled } from '@/lib/identity';
 
-// Admin client for profile operations
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+// Admin client for profile operations — lazy so the module never crashes at
+// import time when Supabase envs are absent (identity/VPS mode).
+function getSupabaseAdmin() {
+  return createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
+}
 
 export async function POST(req: NextRequest) {
   console.log("=== FRAGMENT HANDLER CALLED ===");
-  
+
+  // Supabase OAuth fragment flow is retired under the Flocci identity service.
+  if (identityEnabled()) {
+    return NextResponse.json({ error: 'Legacy OAuth flow retired — use /api/auth/google' }, { status: 410 });
+  }
+
   try {
     const { access_token, refresh_token, user_id } = await req.json();
     const frontendUrl = process.env.FRONTEND_URL || 'https://flocci.in';
@@ -52,7 +58,7 @@ export async function POST(req: NextRequest) {
       };
 
       // Use upsert to either insert new or update existing profile
-      const { data: profile, error: profileError } = await supabaseAdmin
+      const { data: profile, error: profileError } = await getSupabaseAdmin()
         .from('profiles')
         .upsert(profileData, { 
           onConflict: 'id',
@@ -65,7 +71,7 @@ export async function POST(req: NextRequest) {
         console.error("Profile upsert error:", profileError);
         
         // Fallback: try just insert if upsert fails
-        const { error: insertError } = await supabaseAdmin
+        const { error: insertError } = await getSupabaseAdmin()
           .from('profiles')
           .insert(profileData);
           

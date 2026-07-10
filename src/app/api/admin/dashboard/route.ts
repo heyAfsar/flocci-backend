@@ -1,22 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabase } from '@/lib/supabase';
 import { withAuth } from '@/middleware';
-
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',');
+import { isAdmin } from '@/lib/admin';
 
 function isValidISODate(dateStr: string): boolean {
   const date = new Date(dateStr);
   return date instanceof Date && !isNaN(date.getTime()) && dateStr === date.toISOString();
-}
-
-async function isAdmin(req: NextRequest): Promise<boolean> {
-  const token = req.cookies.get('session_token')?.value;
-  if (!token) return false;
-
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) return false;
-
-  return ADMIN_EMAILS.includes(user.email || '');
 }
 
 export async function GET(req: NextRequest) {

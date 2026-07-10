@@ -2,24 +2,12 @@ import { NextRequest, NextResponse } from 'next/server';
 import { Redis } from '@upstash/redis';
 import { withAuth } from '@/middleware';
 import { IP_WHITELIST } from '@/lib/rate-limits';
-import { supabase } from '@/lib/supabase';
+import { isAdmin } from '@/lib/admin';
 
 const redis = new Redis({
   url: process.env.UPSTASH_REDIS_URL!,
   token: process.env.UPSTASH_REDIS_TOKEN!,
 });
-
-const ADMIN_EMAILS = (process.env.ADMIN_EMAILS || '').split(',');
-
-async function isAdmin(req: NextRequest): Promise<boolean> {
-  const token = req.cookies.get('session_token')?.value;
-  if (!token) return false;
-
-  const { data: { user }, error } = await supabase.auth.getUser(token);
-  if (error || !user) return false;
-
-  return ADMIN_EMAILS.includes(user.email || '');
-}
 
 export async function GET(req: NextRequest) {
   const authRes = await withAuth(req);

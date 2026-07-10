@@ -1,122 +1,116 @@
 import { supabase } from '@/lib/supabase';
 import { createClient } from '@supabase/supabase-js';
 import { NextRequest, NextResponse } from 'next/server';
-
-// Admin client for profile operations
-const supabaseAdmin = createClient(
-  process.env.NEXT_PUBLIC_SUPABASE_URL!,
-  process.env.SUPABASE_SERVICE_ROLE_KEY!
-);
+import {
+  APP_ID,
+  identityEnabled,
+  identityFetch,
+  verifyIdentityToken,
+  ensureProfile,
+  applySetCookies,
+  setAppSessionCookie,
+} from '@/lib/identity';
 
 export async function GET(req: NextRequest) {
-  console.log("=== AUTH CALLBACK CALLED ===");
+  const frontendUrl = (process.env.FRONTEND_URL || 'https://flocci.in').replace(/\/$/, '');
   try {
     const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
     const { searchParams } = new URL(req.url);
-    const code = searchParams.get('code');
     const error = searchParams.get('error');
-
-    // Frontend URL for redirects
-    const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:8081';
-
     if (error) {
-      console.error("OAuth error:", error);
       return NextResponse.redirect(`${frontendUrl}/login?error=${error}`);
     }
 
+    if (identityEnabled()) {
+      // Identity-mediated Google flow: exchange the one-time handoff code for
+      // a session. Identity emits both param dialects — accept either.
+      const code = searchParams.get('code') || searchParams.get('handoffCode');
+      const returnToRaw = searchParams.get('return_to') || searchParams.get('returnTo') || '/dashboard';
+      const returnTo = returnToRaw.startsWith('/') ? returnToRaw : '/dashboard';
+      if (!code) {
+        return NextResponse.redirect(`${frontendUrl}/login?error=no_code`);
+      }
+      const result = await identityFetch('/v1/auth/google/session', {
+        body: { code, app_id: APP_ID },
+        cookieHeader: req.headers.get('cookie'),
+      });
+      if (result.status !== 200 || !result.body) {
+        return NextResponse.redirect(`${frontendUrl}/login?error=exchange_failed`);
+      }
+      const accessToken =
+        (result.body.access_token as string) ||
+        ((result.body.session as Record<string, unknown>)?.['access_token'] as string);
+      if (!accessToken) {
+        return NextResponse.redirect(`${frontendUrl}/login?error=exchange_failed`);
+      }
+      const claims = await verifyIdentityToken(accessToken);
+      await ensureProfile(claims);
+
+      const target = returnTo === '/' ? '/dashboard' : returnTo;
+      const response = NextResponse.redirect(`${frontendUrl}${target}`);
+      applySetCookies(response, result.setCookies);
+      setAppSessionCookie(response, accessToken);
+      return response;
+    }
+
+    // ── Legacy path: Supabase code exchange + profile upsert ──
+    const supabaseAdmin = createClient(
+      process.env.NEXT_PUBLIC_SUPABASE_URL!,
+      process.env.SUPABASE_SERVICE_ROLE_KEY!,
+    );
+    const code = searchParams.get('code');
     if (!code) {
       return NextResponse.redirect(`${frontendUrl}/login?error=no_code`);
     }
-
     const { data, error: exchangeError } = await supabase.auth.exchangeCodeForSession(code);
-    
     if (exchangeError) {
-      console.error("Code exchange error:", exchangeError);
       return NextResponse.redirect(`${frontendUrl}/login?error=exchange_failed`);
     }
 
-    // Ensure profile exists for the user
     if (data.user) {
       try {
-        console.log("Processing profile for user:", data.user.id, data.user.email);
-        
-        // Always try to create/update profile for Google OAuth users
         const profileData = {
           id: data.user.id,
-          full_name: data.user.user_metadata?.full_name || 
-                    data.user.user_metadata?.name || 
-                    data.user.email?.split('@')[0] || 'User',
+          full_name:
+            data.user.user_metadata?.full_name ||
+            data.user.user_metadata?.name ||
+            data.user.email?.split('@')[0] ||
+            'User',
           email: data.user.email,
           phone: data.user.user_metadata?.phone || null,
           company_name: null,
           role: 'user',
-          updated_at: new Date().toISOString()
+          updated_at: new Date().toISOString(),
         };
-
-        // Use upsert to either insert new or update existing profile
-        const { data: profile, error: profileError } = await supabaseAdmin
+        const { error: profileError } = await supabaseAdmin
           .from('profiles')
-          .upsert(profileData, { 
-            onConflict: 'id',
-            ignoreDuplicates: false 
-          })
+          .upsert(profileData, { onConflict: 'id', ignoreDuplicates: false })
           .select()
           .single();
-
         if (profileError) {
-          console.error("Profile upsert error:", profileError);
-          
-          // Fallback: try just insert if upsert fails
-          const { error: insertError } = await supabaseAdmin
-            .from('profiles')
-            .insert(profileData);
-            
+          const { error: insertError } = await supabaseAdmin.from('profiles').insert(profileData);
           if (insertError && !insertError.message.includes('duplicate')) {
-            console.error("Profile insert fallback error:", insertError);
-          } else {
-            console.log("Profile created via fallback insert for user:", data.user.id);
+            console.error('Profile insert fallback error:', insertError);
           }
-        } else {
-          console.log("Profile upserted successfully for user:", data.user.id);
         }
       } catch (profileErr) {
-        console.error("Profile processing error:", profileErr);
-        
-        // Last resort: simple insert with minimal data
-        try {
-          await supabaseAdmin
-            .from('profiles')
-            .insert({
-              id: data.user.id,
-              full_name: data.user.user_metadata?.name || 'User',
-              email: data.user.email,
-              role: 'user'
-            });
-          console.log("Profile created with minimal data for user:", data.user.id);
-        } catch (finalErr) {
-          console.error("Final profile creation attempt failed:", finalErr);
-        }
+        console.error('Profile processing error:', profileErr);
       }
     }
 
-    // Successful OAuth login - redirect to clean dashboard URL
     const response = NextResponse.redirect(`${frontendUrl}/dashboard`);
-    
-    // Set session cookie for additional security
     if (data.session) {
       response.cookies.set('supabase_session', data.session.access_token, {
         httpOnly: true,
         secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         domain: cookieDomain,
-        maxAge: data.session.expires_in || 3600
+        maxAge: data.session.expires_in || 3600,
       });
     }
-
     return response;
-
   } catch (e) {
-    console.error("Auth callback error:", e);
-    return NextResponse.redirect(`${process.env.FRONTEND_URL || 'http://localhost:8081'}/login?error=callback_failed`);
+    console.error('Auth callback error:', e);
+    return NextResponse.redirect(`${frontendUrl}/login?error=callback_failed`);
   }
 }

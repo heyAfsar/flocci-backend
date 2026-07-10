@@ -1,14 +1,15 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { supabaseAdmin } from '@/lib/supabase-admin';
 import { hashToken, extractSessionToken } from '@/lib/auth';
+import { identityEnabled, resolveSession } from '@/lib/identity';
 import path from 'path';
 import fs from 'fs';
 
 export async function GET(req: NextRequest) {
   const sessionToken = extractSessionToken(req);
 
-  if (!sessionToken) {
-    return NextResponse.json({ error: 'Unauthorized' }, { 
+  if (!sessionToken && !identityEnabled()) {
+    return NextResponse.json({ error: 'Unauthorized' }, {
       status: 401,
       headers: {
         'Access-Control-Allow-Origin': '*',
@@ -18,19 +19,25 @@ export async function GET(req: NextRequest) {
     });
   }
 
-  const hashedToken = await hashToken(sessionToken);
-  const { data: sessions, error } = await supabaseAdmin
-    .from('sessions')
-    .select('custom_users(email)')
-    .eq('token', hashedToken);
-
-  let email;
-  const cu = sessions && sessions.length > 0 ? sessions[0].custom_users : undefined;
-  if (cu) {
-    if (Array.isArray(cu)) {
-      email = cu[0]?.email;
-    } else {
-      email = (cu as { email: string }).email;
+  let email: string | undefined;
+  let error = null;
+  let sessions: unknown[] | null = [null];
+  if (identityEnabled()) {
+    // Identity mode: the drive account signs in with its Flocci account.
+    const session = await resolveSession(req);
+    email = session?.user.email;
+    if (!session) sessions = [];
+  } else {
+    const hashedToken = await hashToken(sessionToken!);
+    const res = await supabaseAdmin
+      .from('sessions')
+      .select('custom_users(email)')
+      .eq('token', hashedToken);
+    sessions = res.data;
+    error = res.error;
+    const cu = res.data && res.data.length > 0 ? res.data[0].custom_users : undefined;
+    if (cu) {
+      email = Array.isArray(cu) ? cu[0]?.email : (cu as { email: string }).email;
     }
   }
 
