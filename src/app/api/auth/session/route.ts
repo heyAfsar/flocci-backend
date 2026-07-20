@@ -3,6 +3,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { extractSessionToken, hashToken } from '@/lib/auth';
 import { supabase } from '@/lib/supabase';
 import {
+  APP_ID,
   identityEnabled,
   identityFetch,
   resolveSession,
@@ -129,9 +130,12 @@ export async function DELETE(req: NextRequest) {
     const cookieDomain = process.env.COOKIE_DOMAIN || undefined;
 
     if (identityEnabled()) {
-      // Sign-out anywhere = signed out everywhere (founder decision): revoke
-      // the identity session and forward its clearing Set-Cookie headers.
+      // Per-app sign-out (platform decision, revised 2026-07-20): identity
+      // marks THIS app signed out on this browser (flocci_slo, forwarded via
+      // applySetCookies) — the umbrella session and other apps stay signed in.
+      // The "sign out everywhere" door is /api/auth/umbrella/logout.
       const result = await identityFetch('/v1/auth/logout', {
+        body: { app_id: APP_ID },
         cookieHeader: req.headers.get('cookie'),
       });
       const response = NextResponse.json({ message: 'Logout successful' }, { status: 200 });

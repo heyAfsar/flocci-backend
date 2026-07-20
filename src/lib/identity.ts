@@ -175,7 +175,10 @@ export async function resolveSession(req: NextRequest): Promise<SessionResolutio
 
   const cookieHeader = req.headers.get('cookie');
   if (!cookieHeader || !cookieHeader.includes('flocci_refresh')) return null;
-  const refreshed = await identityFetch('/v1/auth/refresh', { cookieHeader });
+  // app_id makes this the per-app silent bootstrap: identity answers 401
+  // APP_SIGNED_OUT while this app is signed out on this browser (flocci_slo);
+  // the explicit Google door lifts that suppression automatically.
+  const refreshed = await identityFetch('/v1/auth/refresh', { body: { app_id: APP_ID }, cookieHeader });
   if (refreshed.status !== 200 || !refreshed.body) return null;
   const newToken =
     (refreshed.body.access_token as string) ||
