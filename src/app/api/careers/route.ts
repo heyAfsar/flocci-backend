@@ -1,22 +1,20 @@
 import { transporter, mailOptions, adminEmail } from '@/lib/nodemailer';
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { Redis } from '@upstash/redis';
+import { resolveSession, applySetCookies, type SessionResolution } from '@/lib/identity';
+import { isVpsTarget } from '@/lib/pg-shim';
+import {
+  submitApplication,
+  getOpenApplication,
+  mapSummary,
+  appendEvent,
+  contentTypeForFile,
+  OpenApplicationExistsError,
+} from '@/lib/careers-store';
 
 /* -------------------------------------------------------------------------- */
 /* Shared helpers                                                             */
 /* -------------------------------------------------------------------------- */
-
-function getRedisClient(): Redis | null {
-  const url = process.env.UPSTASH_REDIS_URL;
-  const token = process.env.UPSTASH_REDIS_TOKEN;
-  if (!url || !token) return null;
-  try {
-    return new Redis({ url, token });
-  } catch {
-    return null;
-  }
-}
 
 // Resume hardening — mirrors the client-side limits.
 const MAX_RESUME_BYTES = 5 * 1024 * 1024; // 5 MB decoded
@@ -407,56 +405,90 @@ export async function OPTIONS() {
 }
 
 export async function POST(req: NextRequest) {
+  if (!isVpsTarget()) {
+    return NextResponse.json(
+      { error: 'Applications are temporarily unavailable. Please try again shortly.' },
+      { status: 503 }
+    );
+  }
+
+  // Identity is the session, not the payload — a candidate must not be able
+  // to apply as someone else, and every response from here on must forward
+  // any rotated platform cookies (silent refresh) via applySetCookies.
+  let session: SessionResolution | null;
   try {
-    const body = await req.json();
-    const parseResult = careerApplicationSchema.safeParse(body);
+    session = await resolveSession(req);
+  } catch (e) {
+    console.error('Career application session resolution error:', e);
+    session = null;
+  }
+  if (!session) {
+    return NextResponse.json({ error: 'Please sign in to apply' }, { status: 401 });
+  }
+
+  const json = (body: Record<string, unknown>, status: number) => {
+    const response = NextResponse.json(body, { status });
+    if (session!.setCookies.length) applySetCookies(response, session!.setCookies);
+    return response;
+  };
+
+  try {
+    const rawBody = (await req.json().catch(() => ({}))) as Record<string, unknown>;
+
+    // Override the payload's identity fields with the signed-in profile's —
+    // the payload's own candidateEmail/candidateName are never trusted.
+    rawBody.candidateEmail = session.user.email;
+    if (!rawBody.candidateName || String(rawBody.candidateName).trim() === '') {
+      rawBody.candidateName = session.user.full_name || session.user.email.split('@')[0] || 'Candidate';
+    }
+
+    const parseResult = careerApplicationSchema.safeParse(rawBody);
 
     if (!parseResult.success) {
-      return NextResponse.json(
-        { error: 'Invalid input', details: parseResult.error.flatten() },
-        { status: 400 }
-      );
+      return json({ error: 'Invalid input', details: parseResult.error.flatten() }, 400);
     }
 
     const data = parseResult.data;
     const { candidateName, candidateEmail, resumeBase64, resumeFileName, jobTitle, jobId } = data;
 
-    // Optional Redis deduplication check (24h window per candidate email + job ID)
-    const redis = getRedisClient();
-    const dedupKey = `careers:dedup:${candidateEmail.toLowerCase().trim()}:${jobId}`;
-
-    if (redis) {
-      try {
-        const alreadyApplied = await redis.get(dedupKey);
-        if (alreadyApplied) {
-          return NextResponse.json(
-            {
-              error: 'Application already submitted',
-              details:
-                'You have already submitted an application for this position recently. We have received your application and will review it soon.',
-            },
-            { status: 409 }
-          );
-        }
-      } catch (redisErr) {
-        console.warn('Redis dedup check error (proceeding):', redisErr);
-      }
+    // One unresolved application per candidate, across every role — this is
+    // the cheap pre-check; the DB partial unique index is the real rule and
+    // is enforced again (and always) inside submitApplication below.
+    const existingOpen = await getOpenApplication(session.user.id);
+    if (existingOpen) {
+      return json(
+        {
+          error:
+            'You already have an application in progress. Track its status or withdraw it from your dashboard before applying again.',
+          openApplication: existingOpen,
+        },
+        409
+      );
     }
+
+    // NOTE: the old 24h Redis dedup key (email + jobId) was removed here on
+    // purpose. It now contradicts the rule it used to approximate: once an
+    // application is rejected or withdrawn the candidate is explicitly free to
+    // apply again — including to the same role — but the Redis key would still
+    // refuse them for the rest of the 24h window, with a 409 that carries no
+    // `openApplication` for the UI to explain. The partial unique index
+    // (`uq_career_applications_one_open`) plus the transactional insert below
+    // are the authority, and they are race-safe on their own.
 
     // Resume extension allowlist
     const loweredFileName = resumeFileName.trim().toLowerCase();
     const extension = loweredFileName.slice(loweredFileName.lastIndexOf('.'));
     if (!ALLOWED_RESUME_EXTENSIONS.includes(extension)) {
-      return NextResponse.json(
+      return json(
         {
           error: 'Unsupported resume format',
           details: `Resume must be one of: ${ALLOWED_RESUME_EXTENSIONS.join(', ')}`,
         },
-        { status: 400 }
+        400
       );
     }
 
-    // Convert base64 resume to Buffer for attachment
+    // Convert base64 resume to Buffer for storage + attachment
     let resumeBuffer: Buffer;
     try {
       const base64Data = resumeBase64.includes('base64,')
@@ -474,18 +506,18 @@ export async function POST(req: NextRequest) {
       }
     } catch (error) {
       console.error('Error processing resume file:', error);
-      return NextResponse.json(
+      return json(
         {
           error: 'Failed to process resume file',
           details: error instanceof Error ? error.message : 'Invalid file format',
         },
-        { status: 400 }
+        400
       );
     }
 
     // Decoded-size cap — matches the client-side 5 MB limit
     if (resumeBuffer.length > MAX_RESUME_BYTES) {
-      return NextResponse.json(
+      return json(
         {
           error: 'Resume file is too large',
           details: `Resume must be 5 MB or smaller (received ${(
@@ -493,36 +525,93 @@ export async function POST(req: NextRequest) {
             (1024 * 1024)
           ).toFixed(1)} MB)`,
         },
-        { status: 400 }
+        400
       );
+    }
+
+    // Persist FIRST — an application that reached the database must never be
+    // lost to a downstream SMTP failure.
+    let applicationRow;
+    try {
+      applicationRow = await submitApplication({
+        profileId: session.user.id,
+        jobId: data.jobId,
+        jobSlug: data.jobSlug ?? null,
+        jobTitle: data.jobTitle,
+        jobTrack: data.jobTrack ?? null,
+        productTeam: data.productTeam ?? null,
+        companyName: data.companyName,
+        jobType: data.jobType ?? null,
+        location: data.location ?? null,
+        isRemote: data.isRemote ?? false,
+        candidateName,
+        candidateEmail,
+        phone: data.phone ?? null,
+        links: data.links ?? {},
+        education: data.education ?? {},
+        availability: data.availability ?? {},
+        answers: data.answers ?? [],
+        requiredSkills: data.requiredSkills ?? [],
+        coverLetter: data.coverLetter ?? null,
+        meta: data.meta ?? {},
+        resumeFileName,
+        resumeContentType: contentTypeForFile(resumeFileName),
+        resumeSizeBytes: resumeBuffer.length,
+        resumeContent: resumeBuffer,
+      });
+    } catch (e) {
+      if (e instanceof OpenApplicationExistsError) {
+        // Race: two submissions landed together and the DB's partial unique
+        // index caught the second one. Never let this 500 — same clean 409.
+        const openApplication = await getOpenApplication(session.user.id);
+        return json(
+          {
+            error:
+              'You already have an application in progress. Track its status or withdraw it from your dashboard before applying again.',
+            openApplication,
+          },
+          409
+        );
+      }
+      throw e;
     }
 
     const emailHtml = buildAdminEmail(data, resumeFileName, resumeBuffer.length);
 
-    // Send email with attachment
-    const mailOpts = {
-      ...mailOptions(
-        adminEmail,
-        `New Job Application from ${candidateName} for ${jobTitle}`,
-        emailHtml
-      ),
-      replyTo: candidateEmail,
-      attachments: [
-        {
-          filename: resumeFileName,
-          content: resumeBuffer,
-        },
-      ],
-    };
-
-    await transporter.sendMail(mailOpts);
-
-    // Record deduplication key after successful email dispatch
-    if (redis) {
+    // Send email with attachment — best-effort. The application is already
+    // safely stored, so a notification failure must not fail the request.
+    try {
+      const mailOpts = {
+        ...mailOptions(
+          adminEmail,
+          `New Job Application from ${candidateName} for ${jobTitle}`,
+          emailHtml
+        ),
+        replyTo: candidateEmail,
+        attachments: [
+          {
+            filename: resumeFileName,
+            content: resumeBuffer,
+          },
+        ],
+      };
+      await transporter.sendMail(mailOpts);
+    } catch (mailErr) {
+      console.error(
+        'Admin notification email failed (application was still recorded):',
+        mailErr
+      );
       try {
-        await redis.set(dedupKey, '1', { ex: 86400 });
-      } catch (redisErr) {
-        console.warn('Redis dedup set error:', redisErr);
+        await appendEvent(undefined, {
+          applicationId: applicationRow.id,
+          kind: 'note',
+          title: 'Team notification failed',
+          body: mailErr instanceof Error ? mailErr.message : 'Unknown email delivery error',
+          actor: 'system',
+          visibleToCandidate: false,
+        });
+      } catch (eventErr) {
+        console.error('Failed to record notification-failure event:', eventErr);
       }
     }
 
@@ -543,9 +632,9 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    return NextResponse.json(
-      { message: 'Application submitted successfully!' },
-      { status: 200 }
+    return json(
+      { message: 'Application submitted successfully!', application: mapSummary(applicationRow) },
+      201
     );
   } catch (e) {
     console.error('Career application error:', e);
@@ -554,20 +643,20 @@ export async function POST(req: NextRequest) {
     // Check if it's a Nodemailer specific error or timeout
     if (e && typeof e === 'object' && 'code' in e) {
       if (e.code === 'ECONNECTION' || e.code === 'ETIMEDOUT') {
-        return NextResponse.json(
+        return json(
           {
             error:
               'Failed to connect to SMTP server. Please try again later or check server configuration.',
             details: errorMessage,
           },
-          { status: 503 }
+          503
         );
       }
     }
 
-    return NextResponse.json(
+    return json(
       { error: 'Failed to submit application', details: errorMessage },
-      { status: 500 }
+      500
     );
   }
 }

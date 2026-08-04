@@ -209,12 +209,21 @@ export async function withAuth(req: NextRequest) {
   const token = req.cookies.get('session_token')?.value || req.cookies.get('flocci_token')?.value;
 
   if (!token || !(await verifySession(token))) {
+    // Identity access tokens are short-lived, but a `flocci_refresh` cookie
+    // means the session is still alive and can be silently refreshed. This
+    // gate cannot refresh (it only verifies a JWT), so refusing here would
+    // 401 a signed-in admin roughly an hour after login. Defer instead: every
+    // /api/admin route also calls isAdmin() -> resolveSession(), which DOES
+    // refresh and which is the real authorisation check. Without the refresh
+    // cookie there is nothing to defer to, so refuse as before.
+    if (req.cookies.get('flocci_refresh')?.value) return null;
+
     return new NextResponse(
       JSON.stringify({ error: 'Unauthorized' }),
       { status: 401 }
     );
   }
-  
+
   return null;
 }
 

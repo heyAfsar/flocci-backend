@@ -9,7 +9,7 @@
  * through the TLS pgbouncer door). DB_TARGET=vps selects this shim in
  * lib/supabase(-admin).ts; anything else keeps the real Supabase client.
  */
-import { Pool } from 'pg';
+import { Pool, type PoolClient } from 'pg';
 
 let pool: Pool | null = null;
 function getPool(): Pool {
@@ -158,3 +158,39 @@ export const pgDb = {
 };
 
 export const isVpsTarget = () => (process.env.DB_TARGET || '').toLowerCase() === 'vps';
+
+/* -------------------------------------------------------------------------- */
+/* Raw-query escape hatch                                                     */
+/*                                                                            */
+/* The shim above covers the supabase-js subset every existing route uses.   */
+/* Careers needs things it cannot express: a partial-unique-index conflict   */
+/* (23505), per-status counts, ILIKE search, joins, offset pagination, and   */
+/* multi-statement transactions for "insert application + resume + event".   */
+/* Both helpers share the same pool. Parameterised only — never interpolate. */
+/* -------------------------------------------------------------------------- */
+
+/** Raw parameterised query on the shared pool. Returns plain rows. */
+export async function pgQuery<T = Row>(text: string, values?: unknown[]): Promise<T[]> {
+  const res = await getPool().query(text, (values ?? []) as never[]);
+  return res.rows as T[];
+}
+
+/**
+ * Run `fn` against a single dedicated client wrapped in BEGIN/COMMIT/ROLLBACK.
+ * Use for multi-statement writes that must land atomically (e.g. an
+ * application row + its resume blob + its "submitted" event).
+ */
+export async function withTransaction<T>(fn: (client: PoolClient) => Promise<T>): Promise<T> {
+  const client = await getPool().connect();
+  try {
+    await client.query('BEGIN');
+    const result = await fn(client);
+    await client.query('COMMIT');
+    return result;
+  } catch (e) {
+    await client.query('ROLLBACK').catch(() => {});
+    throw e;
+  } finally {
+    client.release();
+  }
+}
