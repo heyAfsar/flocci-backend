@@ -30,6 +30,7 @@ type MailOpts = {
   from?: string;
   to: string;
   bcc?: string;
+  replyTo?: string;
   subject: string;
   html: string;
   attachments?: unknown[];

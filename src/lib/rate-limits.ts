@@ -59,6 +59,9 @@ export const ROUTE_RATE_LIMITS: { [key: string]: { requests: number; window: num
   // Authentication routes - more lenient for multiple devices
   '/api/login': { requests: 15, window: 300 }, // 15 requests per 5 minutes (allowing for multiple devices)
   '/api/signup': { requests: 5, window: 300 }, // 5 requests per 5 minutes
+
+  // Job applications route - strict to prevent spam & SMTP quota exhaustion
+  '/api/careers': { requests: 5, window: 300 }, // 5 requests per 5 minutes
   
   // Payment routes - moderate limits
   '/api/payments/initiate': { requests: 10, window: 300 }, // 10 requests per 5 minutes
