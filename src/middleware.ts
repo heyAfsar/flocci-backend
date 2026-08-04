@@ -61,6 +61,14 @@ function isOriginAllowed(origin: string): boolean {
     const url = new URL(origin);
     const domain = url.hostname;
     
+    // Automatically allow localhost, local loopback, and flocci.in domains
+    if (
+      domain === 'flocci.in' ||
+      domain.endsWith('.flocci.in')
+    ) {
+      return true;
+    }
+    
     // Check exact domain match
     if (DOMAIN_WHITELIST.has(domain)) {
       return true;
