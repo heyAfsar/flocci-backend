@@ -495,13 +495,19 @@ export async function submitApplication(input: SubmitApplicationInput): Promise<
             input.candidateName,
             input.candidateEmail,
             input.phone,
-            input.links ?? {},
-            input.education ?? {},
-            input.availability ?? {},
-            input.answers ?? [],
+            // jsonb params MUST be stringified. node-postgres serialises a JS
+            // ARRAY as a Postgres array literal ({...}), not as JSON, so an
+            // array bound to a jsonb column fails to parse — which is exactly
+            // what `answers` is. Objects happen to survive unstringified, but
+            // they are stringified here too so the rule is one rule.
+            // `required_skills` is a real text[] and must NOT be stringified.
+            JSON.stringify(input.links ?? {}),
+            JSON.stringify(input.education ?? {}),
+            JSON.stringify(input.availability ?? {}),
+            JSON.stringify(input.answers ?? []),
             input.requiredSkills ?? [],
             input.coverLetter,
-            input.meta ?? {},
+            JSON.stringify(input.meta ?? {}),
           ],
         );
         const applicationRow = rows[0];
@@ -671,13 +677,19 @@ export async function importApplication(input: ImportApplicationInput): Promise<
             input.candidateName,
             input.candidateEmail,
             input.phone,
-            input.links ?? {},
-            input.education ?? {},
-            input.availability ?? {},
-            input.answers ?? [],
+            // jsonb params MUST be stringified. node-postgres serialises a JS
+            // ARRAY as a Postgres array literal ({...}), not as JSON, so an
+            // array bound to a jsonb column fails to parse — which is exactly
+            // what `answers` is. Objects happen to survive unstringified, but
+            // they are stringified here too so the rule is one rule.
+            // `required_skills` is a real text[] and must NOT be stringified.
+            JSON.stringify(input.links ?? {}),
+            JSON.stringify(input.education ?? {}),
+            JSON.stringify(input.availability ?? {}),
+            JSON.stringify(input.answers ?? []),
             input.requiredSkills ?? [],
             input.coverLetter,
-            input.meta ?? {},
+            JSON.stringify(input.meta ?? {}),
             input.status,
             input.submittedAt,
             terminal ? closedAt : null,
