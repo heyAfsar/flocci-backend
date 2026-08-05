@@ -541,6 +541,212 @@ export async function submitApplication(input: SubmitApplicationInput): Promise<
 }
 
 /* -------------------------------------------------------------------------- */
+/* Import — replay a historical application that only ever existed as email.  */
+/*                                                                            */
+/* Same table, same events, same one-open-application rule as submitApplication */
+/* — the ONLY differences are that every timestamp is the real historical one */
+/* instead of now(), the row may land in a closed status, and no mail is sent */
+/* (these candidates were already emailed the day they applied).              */
+/* -------------------------------------------------------------------------- */
+
+/** Statuses an import may create. Anything else belongs to the admin update path. */
+export const IMPORTABLE_STATUSES = ['submitted', 'withdrawn', 'rejected'] as const;
+export type ImportableStatus = (typeof IMPORTABLE_STATUSES)[number];
+
+export interface ImportApplicationInput
+  extends Omit<
+    SubmitApplicationInput,
+    'resumeFileName' | 'resumeContentType' | 'resumeSizeBytes' | 'resumeContent'
+  > {
+  /** The real historical submission time — becomes submitted_at AND updated_at. */
+  submittedAt: string;
+  status: ImportableStatus;
+  /** Event body for the closing event on a non-`submitted` import. */
+  closingReason?: string | null;
+  /** Historical emails usually carry the resume; a few may not. */
+  resumeFileName?: string | null;
+  resumeContentType?: string | null;
+  resumeSizeBytes?: number | null;
+  resumeContent?: Buffer | null;
+}
+
+/**
+ * Find a previously imported row for the dedupe key `(profile_id, job_id,
+ * submitted_at)`. Re-running the importer must never duplicate a candidate.
+ */
+export async function findImportedApplication(
+  profileId: string,
+  jobId: number,
+  submittedAt: string,
+): Promise<ApplicationRow | null> {
+  const rows = await pgQuery<ApplicationRow>(
+    `SELECT * FROM career_applications
+     WHERE profile_id = $1 AND job_id = $2 AND submitted_at = $3::timestamptz
+     LIMIT 1`,
+    [profileId, jobId, submittedAt],
+  );
+  return rows[0] || null;
+}
+
+/**
+ * Resolve a profile by lowercased email, creating a detached one when absent.
+ *
+ * The created profile deliberately has `identity_user_id = NULL`. `ensureProfile`
+ * links an existing by-email profile to the identity on first Google login, so
+ * an imported profile silently BECOMES the real user's the moment they sign in.
+ * Never invent a fake identity id here — that would permanently orphan the row.
+ */
+export async function resolveOrCreateProfileByEmail(
+  email: string,
+  fullName: string,
+): Promise<{ id: string; created: boolean }> {
+  const lowered = email.trim().toLowerCase();
+
+  const existing = await pgQuery<{ id: string }>(
+    `SELECT id FROM profiles WHERE lower(email) = $1 LIMIT 1`,
+    [lowered],
+  );
+  if (existing[0]) return { id: existing[0].id, created: false };
+
+  // No ON CONFLICT clause on purpose: it would have to name a constraint, and
+  // this must work against the live profiles table regardless of how its email
+  // uniqueness is spelled. A duplicate-key race is caught and re-read instead.
+  try {
+    const inserted = await pgQuery<{ id: string }>(
+      `INSERT INTO profiles (identity_user_id, email, full_name, role)
+       VALUES (NULL, $1, $2, 'user')
+       RETURNING id`,
+      [lowered, fullName],
+    );
+    if (inserted[0]) return { id: inserted[0].id, created: true };
+  } catch (e) {
+    if ((e as { code?: string })?.code !== '23505') throw e;
+  }
+
+  const again = await pgQuery<{ id: string }>(
+    `SELECT id FROM profiles WHERE lower(email) = $1 LIMIT 1`,
+    [lowered],
+  );
+  if (!again[0]) throw new Error(`Failed to resolve or create a profile for ${lowered}`);
+  return { id: again[0].id, created: false };
+}
+
+export async function importApplication(input: ImportApplicationInput): Promise<ApplicationRow> {
+  const MAX_ATTEMPTS = 5;
+  let lastErr: unknown;
+
+  const terminal = TERMINAL_STATUSES.includes(input.status);
+  // The closing event must sort AFTER the submitted event on `created_at ASC`,
+  // even though both belong to the same historical instant.
+  const closedAt = new Date(new Date(input.submittedAt).getTime() + 1000).toISOString();
+
+  for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+    const referenceCode = generateReferenceCode();
+    try {
+      return await withTransaction(async (client) => {
+        const rows = await run<ApplicationRow>(
+          client,
+          `INSERT INTO career_applications (
+             profile_id, reference_code, job_id, job_slug, job_title, job_track, product_team,
+             company_name, job_type, location, is_remote, candidate_name, candidate_email, phone,
+             links, education, availability, answers, required_skills, cover_letter, meta,
+             status, submitted_at, updated_at, decided_at
+           ) VALUES (
+             $1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,$19,$20,$21,
+             $22,$23::timestamptz,$23::timestamptz,$24
+           )
+           RETURNING *`,
+          [
+            input.profileId,
+            referenceCode,
+            input.jobId,
+            input.jobSlug,
+            input.jobTitle,
+            input.jobTrack,
+            input.productTeam,
+            input.companyName,
+            input.jobType,
+            input.location,
+            input.isRemote,
+            input.candidateName,
+            input.candidateEmail,
+            input.phone,
+            input.links ?? {},
+            input.education ?? {},
+            input.availability ?? {},
+            input.answers ?? [],
+            input.requiredSkills ?? [],
+            input.coverLetter,
+            input.meta ?? {},
+            input.status,
+            input.submittedAt,
+            terminal ? closedAt : null,
+          ],
+        );
+        const applicationRow = rows[0];
+
+        if (input.resumeContent && input.resumeFileName) {
+          await run(
+            client,
+            `INSERT INTO career_application_resumes (application_id, file_name, content_type, size_bytes, content, uploaded_at)
+             VALUES ($1,$2,$3,$4,$5,$6::timestamptz)`,
+            [
+              applicationRow.id,
+              input.resumeFileName,
+              input.resumeContentType || contentTypeForFile(input.resumeFileName),
+              input.resumeSizeBytes ?? input.resumeContent.length,
+              input.resumeContent,
+              input.submittedAt,
+            ],
+          );
+        }
+
+        // The submitted event always happened — stamp it at the real date so the
+        // candidate's timeline reads as the history it actually is.
+        await run(
+          client,
+          `INSERT INTO career_application_events
+             (application_id, kind, from_status, to_status, title, body, actor, visible_to_candidate, created_at)
+           VALUES ($1,'submitted',NULL,'submitted','Application submitted',NULL,'candidate',true,$2::timestamptz)`,
+          [applicationRow.id, input.submittedAt],
+        );
+
+        if (input.status !== 'submitted') {
+          const isWithdrawn = input.status === 'withdrawn';
+          await run(
+            client,
+            `INSERT INTO career_application_events
+               (application_id, kind, from_status, to_status, title, body, actor, visible_to_candidate, created_at)
+             VALUES ($1,$2,'submitted',$3,$4,$5,'import',true,$6::timestamptz)`,
+            [
+              applicationRow.id,
+              isWithdrawn ? 'withdrawn' : 'status_change',
+              input.status,
+              isWithdrawn ? 'Application withdrawn' : `Status changed to ${STATUS_LABEL[input.status]}`,
+              input.closingReason && input.closingReason.trim() ? input.closingReason.trim() : null,
+              closedAt,
+            ],
+          );
+        }
+
+        return applicationRow;
+      });
+    } catch (e) {
+      const err = e as { code?: string; constraint?: string };
+      if (err?.code === '23505') {
+        if (err.constraint === 'uq_career_applications_one_open') {
+          throw new OpenApplicationExistsError();
+        }
+        lastErr = e;
+        continue;
+      }
+      throw e;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('Failed to generate a unique reference code');
+}
+
+/* -------------------------------------------------------------------------- */
 /* Withdraw (candidate)                                                       */
 /* -------------------------------------------------------------------------- */
 
