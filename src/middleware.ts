@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 import { Redis } from '@upstash/redis';
 import { isWhitelisted, getRouteRateLimit, IP_BLOCK_COOLDOWN, DOMAIN_WHITELIST } from '@/lib/rate-limits';
+import { isServiceCall } from '@/lib/service-auth';
 
 export const config = {
   matcher: '/api/:path*',
@@ -260,8 +261,11 @@ export default async function middleware(req: NextRequest) {
       return rateLimitResponse;
     }
 
-    // Then check auth for protected routes
-    if (req.nextUrl.pathname.startsWith('/api/admin')) {
+    // Then check auth for protected routes. A valid X-Flocci-Service-Key
+    // (flocci-panel-srv and other sibling services) skips the cookie-based
+    // gate entirely — a service call has no browser session to check, and
+    // the route itself re-verifies via isAdminOrService before doing anything.
+    if (req.nextUrl.pathname.startsWith('/api/admin') && !isServiceCall(req)) {
       const authResponse = await withAuth(req);
       if (authResponse) {
         // Add CORS headers to auth error responses

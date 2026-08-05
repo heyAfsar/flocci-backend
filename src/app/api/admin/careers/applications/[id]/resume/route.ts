@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/middleware';
-import { isAdmin } from '@/lib/admin';
+import { isServiceCall, isAdminOrService } from '@/lib/service-auth';
 import { isVpsTarget } from '@/lib/pg-shim';
 import { getResumeAdmin } from '@/lib/careers-store';
 
@@ -19,10 +19,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     );
   }
 
-  const authRes = await withAuth(req);
-  if (authRes) return authRes;
+  if (!isServiceCall(req)) {
+    const authRes = await withAuth(req);
+    if (authRes) return authRes;
+  }
 
-  if (!(await isAdmin(req))) {
+  if (!(await isAdminOrService(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
 

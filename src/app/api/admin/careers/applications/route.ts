@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { withAuth } from '@/middleware';
-import { isAdmin } from '@/lib/admin';
+import { isServiceCall, isAdminOrService } from '@/lib/service-auth';
 import { isVpsTarget } from '@/lib/pg-shim';
 import { listApplicationsAdmin, mapAdminRow, isValidStatus } from '@/lib/careers-store';
 
@@ -16,10 +16,14 @@ export async function GET(req: NextRequest) {
     );
   }
 
-  const authRes = await withAuth(req);
-  if (authRes) return authRes;
+  // A service call (flocci-panel-srv) has no browser session — skip the
+  // cookie gate for it, otherwise keep the human-admin session check as-is.
+  if (!isServiceCall(req)) {
+    const authRes = await withAuth(req);
+    if (authRes) return authRes;
+  }
 
-  if (!(await isAdmin(req))) {
+  if (!(await isAdminOrService(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
 

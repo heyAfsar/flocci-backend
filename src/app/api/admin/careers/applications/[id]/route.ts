@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { withAuth } from '@/middleware';
-import { isAdmin } from '@/lib/admin';
+import { isServiceCall, isAdminOrService } from '@/lib/service-auth';
 import { isVpsTarget } from '@/lib/pg-shim';
 import { resolveSession } from '@/lib/identity';
 import { transporter, mailOptions } from '@/lib/nodemailer';
@@ -27,10 +27,12 @@ export async function GET(req: NextRequest, { params }: { params: { id: string }
     );
   }
 
-  const authRes = await withAuth(req);
-  if (authRes) return authRes;
+  if (!isServiceCall(req)) {
+    const authRes = await withAuth(req);
+    if (authRes) return authRes;
+  }
 
-  if (!(await isAdmin(req))) {
+  if (!(await isAdminOrService(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
@@ -54,6 +56,10 @@ const patchSchema = z.object({
   note: z.string().max(2000).optional(),
   internalNote: z.string().max(2000).optional(),
   notifyCandidate: z.boolean().optional(),
+  // Only honoured for S2S calls (flocci-panel-srv has no session email to
+  // record as the actor). A session request must never spoof the actor via
+  // this field — see below, it's read only inside the `isServiceCall` branch.
+  actorEmail: z.string().max(320).optional(),
 });
 
 const esc = (value: unknown): string =>
@@ -98,17 +104,17 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
     );
   }
 
-  const authRes = await withAuth(req);
-  if (authRes) return authRes;
+  const serviceCall = isServiceCall(req);
+  if (!serviceCall) {
+    const authRes = await withAuth(req);
+    if (authRes) return authRes;
+  }
 
-  if (!(await isAdmin(req))) {
+  if (!(await isAdminOrService(req))) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 403 });
   }
 
   try {
-    const session = await resolveSession(req);
-    const actor = session?.user.email || 'admin';
-
     const body = await req.json().catch(() => ({}));
     const parsed = patchSchema.safeParse(body);
     if (!parsed.success) {
@@ -118,7 +124,19 @@ export async function PATCH(req: NextRequest, { params }: { params: { id: string
       );
     }
 
-    const { status, note, internalNote, notifyCandidate } = parsed.data;
+    const { status, note, internalNote, notifyCandidate, actorEmail } = parsed.data;
+
+    // Audit-trail actor: a service call has no session, so it may pass
+    // `actorEmail` (falling back to 'panel'). A session request always uses
+    // its own resolved email — `actorEmail` is IGNORED there, so a session
+    // caller can never spoof the actor via the body.
+    let actor: string;
+    if (serviceCall) {
+      actor = (actorEmail && actorEmail.trim()) || 'panel';
+    } else {
+      const session = await resolveSession(req);
+      actor = session?.user.email || 'admin';
+    }
     if (!status && note === undefined && !internalNote) {
       return NextResponse.json({ error: 'Nothing to update' }, { status: 400 });
     }

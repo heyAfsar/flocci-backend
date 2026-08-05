@@ -182,6 +182,12 @@ export interface TimelineEvent {
   body: string | null;
   actor: string;
   createdAt: string;
+  /**
+   * False only on internal reviewer notes. Admin and panel surfaces receive
+   * these alongside the candidate timeline and must mark them; the candidate
+   * query filters them out server-side, so this is always true on that path.
+   */
+  visibleToCandidate: boolean;
 }
 
 export interface ApplicationDetail extends ApplicationSummary {
@@ -246,6 +252,12 @@ export function mapEvent(row: EventRow): TimelineEvent {
     body: row.body,
     actor: row.actor,
     createdAt: iso(row.created_at) as string,
+    // Admin/panel surfaces receive internal reviewer notes alongside the
+    // candidate-visible timeline and MUST be able to tell them apart before
+    // rendering. The candidate query filters to visible_to_candidate = true
+    // upstream, so this is always true on that path — never a leak, just an
+    // explicit flag instead of making the reader guess from `kind`.
+    visibleToCandidate: row.visible_to_candidate !== false,
   };
 }
 
@@ -732,6 +744,127 @@ export async function updateApplicationAdmin(id: string, input: AdminUpdateInput
 
     return current;
   });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Admin summary — executive aggregate for the control-plane panel's         */
+/* careers overview. Real SQL aggregation only — never pull whole tables     */
+/* into JS to count them.                                                    */
+/* -------------------------------------------------------------------------- */
+
+export interface AdminSummaryByJob {
+  jobId: number;
+  jobTitle: string;
+  total: number;
+  open: number;
+}
+
+export interface AdminSummaryRecent {
+  id: string;
+  referenceCode: string;
+  candidateName: string;
+  jobTitle: string;
+  status: ApplicationStatus;
+  submittedAt: string;
+}
+
+export interface AdminSummaryDay {
+  date: string;
+  count: number;
+}
+
+export interface AdminApplicationsSummary {
+  total: number;
+  open: number;
+  byStatus: Partial<Record<ApplicationStatus, number>>;
+  byJob: AdminSummaryByJob[];
+  recent: AdminSummaryRecent[];
+  last7Days: AdminSummaryDay[];
+}
+
+export async function getApplicationsSummaryAdmin(): Promise<AdminApplicationsSummary> {
+  const [totalRows, byStatusRows, byJobRows, recentRows, last7Rows] = await Promise.all([
+    pgQuery<{ count: string }>(`SELECT COUNT(*)::text AS count FROM career_applications`),
+
+    pgQuery<{ status: string; count: string }>(
+      `SELECT status, COUNT(*)::text AS count FROM career_applications GROUP BY status`,
+    ),
+
+    pgQuery<{ job_id: number; job_title: string; total: string; open: string }>(
+      `SELECT job_id,
+              MAX(job_title) AS job_title,
+              COUNT(*)::text AS total,
+              COUNT(*) FILTER (WHERE status = ANY($1::text[]))::text AS open
+       FROM career_applications
+       GROUP BY job_id
+       ORDER BY COUNT(*) DESC`,
+      [BLOCKING_STATUSES],
+    ),
+
+    pgQuery<{
+      id: string;
+      reference_code: string;
+      candidate_name: string;
+      job_title: string;
+      status: string;
+      submitted_at: string | Date;
+    }>(
+      `SELECT id, reference_code, candidate_name, job_title, status, submitted_at
+       FROM career_applications
+       ORDER BY submitted_at DESC
+       LIMIT 10`,
+    ),
+
+    // One row per of the last 7 calendar days (server timezone), zero-filled
+    // via generate_series so quiet days show 0 rather than being absent.
+    pgQuery<{ date: string; count: string }>(
+      `SELECT to_char(d::date, 'YYYY-MM-DD') AS date,
+              COALESCE(c.count, 0)::text AS count
+       FROM generate_series((CURRENT_DATE - INTERVAL '6 days')::date, CURRENT_DATE::date, INTERVAL '1 day') AS d
+       LEFT JOIN (
+         SELECT date_trunc('day', submitted_at)::date AS day, COUNT(*) AS count
+         FROM career_applications
+         WHERE submitted_at >= CURRENT_DATE - INTERVAL '6 days'
+         GROUP BY date_trunc('day', submitted_at)::date
+       ) c ON c.day = d::date
+       ORDER BY d`,
+    ),
+  ]);
+
+  const total = Number(totalRows[0]?.count || 0);
+
+  const byStatus: Partial<Record<ApplicationStatus, number>> = {};
+  let open = 0;
+  for (const r of byStatusRows) {
+    if (isValidStatus(r.status)) {
+      const n = Number(r.count);
+      byStatus[r.status] = n;
+      if (isOpenStatus(r.status)) open += n;
+    }
+  }
+
+  const byJob: AdminSummaryByJob[] = byJobRows.map((r) => ({
+    jobId: r.job_id,
+    jobTitle: r.job_title,
+    total: Number(r.total),
+    open: Number(r.open),
+  }));
+
+  const recent: AdminSummaryRecent[] = recentRows.map((r) => ({
+    id: r.id,
+    referenceCode: r.reference_code,
+    candidateName: r.candidate_name,
+    jobTitle: r.job_title,
+    status: r.status as ApplicationStatus,
+    submittedAt: iso(r.submitted_at) as string,
+  }));
+
+  const last7Days: AdminSummaryDay[] = last7Rows.map((r) => ({
+    date: r.date,
+    count: Number(r.count),
+  }));
+
+  return { total, open, byStatus, byJob, recent, last7Days };
 }
 
 /* -------------------------------------------------------------------------- */
