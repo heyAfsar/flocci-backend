@@ -12,13 +12,15 @@ a delta.
 |---|---|---|
 | `flocci.in` (landing SPA) | **Vercel** | repo `flocci-official-landing-page` |
 | `apis.flocci.in` (careers API) | **Vercel** | repo `flocci-backend` |
-| `panel.flocci.in` UI | **VPS**, nginx static | serves `/var/www/flocci/flocci-panel-ui/dist` |
+| `panel.flocci.in` UI | **VPS**, nginx static | serves `/var/www/flocci/flocci-panel-ui/dist` (writable by `afsar`, no sudo needed) |
 | `panel.flocci.in` API | **VPS**, pm2 | `~/flocci/panel/flocci-panel-srv`, `127.0.0.1:3010` |
 | DB `flocci_app_official` | **VPS** Postgres | reached by Vercel via pgbouncer `:6432` |
 
 VPS = `afsar@15.235.166.170` (`vps-fa7a4e55`).
 nginx vhost `/etc/nginx/sites-enabled/panel.flocci.in` proxies `/api/`, `/auth/`, `/ws` → `:3010`.
-pm2 process name is **`vps-monitor`** (not "panel").
+pm2 process name is **`flocci-panel-srv`** (pm_id 1). NOTE: the repo's
+`ecosystem.config.js` says `vps-monitor` — the running process was registered under a different
+name, so always target `flocci-panel-srv`.
 
 > **Trap:** `pm2` is installed under nvm and is **not on the non-interactive SSH PATH**. A plain
 > `ssh vps "pm2 list"` fails with `command not found`. Use the absolute path:
@@ -86,7 +88,9 @@ Put that one value in:
 2. VPS panel `.env` (step 3 below)
 
 ### Step 2 — Vercel side
-Push `flocci-backend` and `flocci-official-landing-page`, then **redeploy `flocci-backend`** so it
+Vercel's production branch for both repos is **`int25june25`**, NOT `main` (verified 2026-08-05:
+routes that exist only on `int25june25` are live on apis.flocci.in, and `main` is 5 commits behind).
+Push that branch, then **redeploy `flocci-backend`** so it
 picks up the new env var. (A push alone deploys the code; an env var added afterwards needs a
 redeploy.)
 
@@ -105,7 +109,7 @@ OFFICIAL_SERVICE_KEY=<the same value from step 1>
 ```
 Restart:
 ```bash
-pm2 restart vps-monitor && pm2 logs vps-monitor --lines 30
+pm2 restart flocci-panel-srv --update-env && pm2 logs flocci-panel-srv --lines 30 --nostream
 ```
 
 ### Step 4 — VPS panel UI
@@ -155,7 +159,7 @@ curl -s -o /dev/null -w "%{http_code}\n" http://127.0.0.1:3010/api/careers/summa
 
 ## 6. Rollback
 
-- **Panel srv:** `cd ~/flocci/panel/flocci-panel-srv && git reset --hard e7a4947 && pm2 restart vps-monitor`
+- **Panel srv:** `cd ~/flocci/panel/flocci-panel-srv && git reset --hard e7a4947 && pm2 restart flocci-panel-srv --update-env`
 - **Panel UI:** the `/var/www/flocci/` convention is a `.rollback-YYYYMMDD` sibling — copy the dist
   aside before overwriting if you want one.
 - **Careers link only:** blank `OFFICIAL_SERVICE_KEY` on the VPS and restart. The Careers tab reverts
