@@ -118,6 +118,10 @@ PASSWORD_PEPPER=your-random-password-pepper-string
 UPSTASH_REDIS_URL=https://your-upstash-redis-url
 UPSTASH_REDIS_TOKEN=your-upstash-redis-token
 
+# Talent Careers Portal API (candidate challenges on the dashboard)
+TALENT_PORTAL_API_URL=https://talent.flocci.in/api/portal/v1
+TALENT_PORTAL_KEY=your-talent-portal-key
+
 # Application Configuration
 APP_URL=https://your-domain.com
 ADMIN_EMAILS=admin1@example.com,admin2@example.com

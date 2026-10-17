@@ -63,6 +63,11 @@ export const ROUTE_RATE_LIMITS: { [key: string]: { requests: number; window: num
   // Job applications route - strict to prevent spam & SMTP quota exhaustion
   '/api/careers': { requests: 5, window: 300 }, // 5 requests per 5 minutes
   
+  // Candidate challenge workspace: autosave + polling, so far more generous than
+  // the application-submit limit above (longest-prefix match wins). A breach
+  // blocks the whole IP, so this must clear a debounced autosave comfortably.
+  '/api/careers/challenges': { requests: 200, window: 300 },
+
   // Payment routes - moderate limits
   '/api/payments/initiate': { requests: 10, window: 300 }, // 10 requests per 5 minutes
   
