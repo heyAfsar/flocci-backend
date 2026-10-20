@@ -83,6 +83,7 @@ NOTIFICATION_URL = cfg("NOTIFICATION_URL", "http://127.0.0.1:3201")
 NOTIFICATION_SERVICE_KEY = cfg("NOTIFICATION_SERVICE_KEY", "")
 REPLY_TO = cfg("REPLY_TO", IMAP_USER)
 POLL_SECONDS = int(cfg("POLL_SECONDS", "60"))
+SUBJECT_MATCH = cfg("SUBJECT_MATCH", "Round 1 challenge")
 
 
 def log(msg):
@@ -208,13 +209,20 @@ def process(ref, accepted_at, sender, roster, state, source):
     if not person:
         log(f"[watcher] unknown ref {ref} from {sender} ({source})")
         return
-    rec = state.setdefault(ref, {"email": person["email"]})
-    if rec.get("confirmed_at") or rec.get("rejected"):
+    done = state.get(ref, {})
+    if done.get("confirmed_at") or done.get("rejected"):
         return
+    if source == "mailbox" and sender != person["email"].lower():
+        # Only the candidate's own address can accept by mail; anything else waits for --accept.
+        mismatch = state.setdefault("_sender_mismatch", {})
+        if mismatch.get(ref) != sender:
+            mismatch[ref] = sender
+            log(f"[watcher] {ref} reply from {sender}, expected {person['email']}; needs manual --accept")
+            save_state(state)
+        return
+    rec = state.setdefault(ref, {"email": person["email"]})
     rec.setdefault("accepted_at", accepted_at.isoformat())
     rec.setdefault("source", source)
-    if sender and sender.lower() != person["email"].lower():
-        rec["sender_mismatch"] = sender
     sent_at = parse_iso(person["sent_at"])
     if accepted_at - sent_at > timedelta(hours=ACCEPT_WITHIN_HOURS):
         rec["rejected"] = "accepted after the reply window"
@@ -256,11 +264,11 @@ def reply_text(msg):
 
 
 def poll_mailbox(roster, state):
-    box = imaplib.IMAP4_SSL("imap.gmail.com", 993)
+    box = imaplib.IMAP4_SSL("imap.gmail.com", 993, timeout=60)
     try:
         box.login(IMAP_USER, IMAP_PASS)
         box.select("INBOX", readonly=True)
-        typ, data = box.search(None, "X-GM-RAW", '"newer_than:7d I ACCEPT"')
+        typ, data = box.search(None, "X-GM-RAW", f'"newer_than:7d subject:({SUBJECT_MATCH})"')
         if typ != "OK":
             return
         for num in data[0].split():
@@ -268,8 +276,9 @@ def poll_mailbox(roster, state):
             if typ != "OK" or not msg_data or not msg_data[0]:
                 continue
             msg = email.message_from_bytes(msg_data[0][1])
-            sender = parseaddr(msg.get("From", ""))[1]
-            if sender.lower() == IMAP_USER.lower():
+            sender = parseaddr(msg.get("From", ""))[1].lower()
+            auto = (msg.get("Auto-Submitted") or "no").lower() != "no"
+            if auto or sender == IMAP_USER.lower() or re.match(r"(mailer-daemon|postmaster|no-?reply)", sender):
                 continue
             match = REF_RE.search(reply_text(msg))
             if not match:
