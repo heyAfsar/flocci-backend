@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { resolveSession, applySetCookies } from '@/lib/identity';
 import { isVpsTarget } from '@/lib/pg-shim';
+import { hasCommittedChallenge, PortalError } from '@/lib/talent-portal';
 import {
   withdrawApplication,
   mapSummary,
@@ -41,11 +42,21 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     };
 
     try {
+      const email = String(session.user.email || '').trim().toLowerCase();
+      if (email && (await hasCommittedChallenge(email))) {
+        return json(
+          { error: 'You accepted a Round 1 challenge, so this application can no longer be withdrawn.' },
+          409
+        );
+      }
       const updated = await withdrawApplication(params.id, session.user.id, reason);
       return json({ application: mapSummary(updated) }, 200);
     } catch (e) {
       if (e instanceof ApplicationNotFoundError) {
         return json({ error: 'Application not found' }, 404);
+      }
+      if (e instanceof PortalError) {
+        return json({ error: 'We could not check your challenge right now. Please try again shortly.' }, 503);
       }
       if (e instanceof ApplicationNotOpenError) {
         return json(

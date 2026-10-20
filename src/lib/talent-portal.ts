@@ -132,3 +132,17 @@ export function readSubmission(body: unknown): Record<string, unknown> {
   const sub = (body as { submission?: unknown })?.submission;
   return sub && typeof sub === 'object' && !Array.isArray(sub) ? (sub as Record<string, unknown>) : {};
 }
+
+/**
+ * True when this candidate holds a Round 1 challenge that is live or done
+ * (anything but expired). Accepting a challenge is a commitment, so the
+ * application behind it cannot be withdrawn. Throws PortalError when Talent
+ * cannot answer, so callers fail closed.
+ */
+export async function hasCommittedChallenge(email: string): Promise<boolean> {
+  if (!portalConfigured()) return false;
+  const data = await portalJson<{ assignments?: { status?: string }[] }>(
+    `/assessments?email=${encodeURIComponent(email)}`
+  );
+  return (data.assignments || []).some((a) => a.status && a.status !== 'expired');
+}
