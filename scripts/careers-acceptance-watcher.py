@@ -272,7 +272,7 @@ def poll_mailbox(roster, state):
         if typ != "OK":
             return
         for num in data[0].split():
-            typ, msg_data = box.fetch(num, "(RFC822)")
+            typ, msg_data = box.fetch(num, "(INTERNALDATE RFC822)")
             if typ != "OK" or not msg_data or not msg_data[0]:
                 continue
             msg = email.message_from_bytes(msg_data[0][1])
@@ -284,10 +284,22 @@ def poll_mailbox(roster, state):
             if not match:
                 continue
             ref = match.group(1).upper()
+            # Lateness is judged by when Gmail RECEIVED the reply (INTERNALDATE), which the
+            # sender cannot set. The Date header is sender-controlled, so it can only make a
+            # reply look later, never earlier: take the later of the two.
+            received = None
             try:
-                accepted_at = email.utils.parsedate_to_datetime(msg.get("Date")).astimezone(timezone.utc)
+                tt = imaplib.Internaldate2tuple(msg_data[0][0])
+                if tt:
+                    received = datetime.fromtimestamp(time.mktime(tt), tz=timezone.utc)
             except Exception:
-                accepted_at = datetime.now(timezone.utc)
+                received = None
+            try:
+                header_at = email.utils.parsedate_to_datetime(msg.get("Date")).astimezone(timezone.utc)
+            except Exception:
+                header_at = None
+            stamps = [t for t in (received, header_at) if t is not None]
+            accepted_at = max(stamps) if stamps else datetime.now(timezone.utc)
             process(ref, accepted_at, sender, roster, state, "mailbox")
     finally:
         try:
